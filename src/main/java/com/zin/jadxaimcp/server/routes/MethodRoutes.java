@@ -66,6 +66,7 @@ public class MethodRoutes {
 
         try {
             JadxWrapper wrapper = mainWindow.getWrapper();
+            MethodSignatures.ensureUnambiguous(wrapper.getIncludedClassesWithInners(), className, methodName, methodSignature);
             if (wrapper == null) {
                 JadxAIMCPPluginError.handleError(ctx, 500, "JadxWrapper not initialized", logger);
                 return;
@@ -88,7 +89,7 @@ public class MethodRoutes {
             // Case 2: Search in specific class
             else {
                 for (JavaClass cls : wrapper.getIncludedClassesWithInners()) {
-                    if (cls.getFullName().equals(className)) {
+                    if ((cls.getFullName().equals(className) || cls.getRawName().equals(className))) {
                         for (JavaMethod method : cls.getMethods()) {
                             if (method.getName().equalsIgnoreCase(methodName)) {
                                 if (!MethodSignatures.matches(method, methodSignature)) {
@@ -103,7 +104,17 @@ public class MethodRoutes {
             }
 
             // if execution reaches here, it means that method has not been found
-            JadxAIMCPPluginError.handleError(ctx, 404, "Requested method " + methodName + " not found.", logger);
+            java.util.List<String> candidates = new java.util.ArrayList<>();
+            for (JavaClass cls : wrapper.getIncludedClassesWithInners()) {
+                if (className == null || className.isEmpty() || cls.getFullName().equals(className) || cls.getRawName().equals(className)) {
+                    candidates.addAll(MethodSignatures.available(cls));
+                    if (candidates.size() >= 50) break;
+                }
+            }
+            java.util.Map<String, Object> error = new java.util.HashMap<>(JadxAIMCPPluginError.response(404,
+                    "Requested method " + methodName + " not found."));
+            error.put("candidates", candidates.subList(0, Math.min(50, candidates.size())));
+            ctx.status(404).json(error);
         } catch (Exception e) {
             JadxAIMCPPluginError.handleError(ctx, "Internal error occurred while retrieving method: " + e.getMessage(), e, logger);
         }

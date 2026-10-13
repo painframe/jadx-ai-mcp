@@ -597,7 +597,7 @@ public class CommentRoutes {
     private JavaClass findClass(String className) {
         JadxWrapper wrapper = mainWindow.getWrapper();
         for (JavaClass cls : wrapper.getIncludedClassesWithInners()) {
-            if (cls.getFullName().equals(className)) {
+            if ((cls.getFullName().equals(className) || cls.getRawName().equals(className))) {
                 return cls;
             }
         }
@@ -610,6 +610,7 @@ public class CommentRoutes {
      *         overloads.
      */
     private JavaMethod findMethod(JavaClass cls, String methodName, String methodSignature) {
+        MethodSignatures.ensureUnambiguous(java.util.List.of(cls), cls.getFullName(), methodName, methodSignature);
         for (JavaMethod method : cls.getMethods()) {
             if (!method.getName().equalsIgnoreCase(methodName)) {
                 continue;
