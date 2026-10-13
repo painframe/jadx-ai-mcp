@@ -51,7 +51,7 @@ public class ClassRoutes {
     private final MainWindow mainWindow;
     private final PaginationUtils paginationUtils;
     private final com.zin.jadxaimcp.utils.SearchCoordinator<Map<String, Object>> searches = new com.zin.jadxaimcp.utils.SearchCoordinator<>();
-    private final SearchProgressTracker progressTracker = SearchProgressTracker.getInstance();
+    private final SearchProgressTracker progressTracker;
     private final DecompilationCache decompilationCache;
 
     /**
@@ -85,6 +85,7 @@ public class ClassRoutes {
 
     public ClassRoutes(MainWindow mainWindow, PaginationUtils paginationUtils) {
         this.mainWindow = mainWindow;
+        this.progressTracker = SearchProgressTracker.forWindow(mainWindow);
         this.decompilationCache = DecompilationCache.forWindow(mainWindow);
         this.paginationUtils = paginationUtils;
     }

@@ -42,10 +42,15 @@ public class GeneralRoutes {
             String status = isRunning ? "Running" : "Stopped";
             String url = isRunning ? "http://127.0.0.1:" + server.getPort() + "/" : "N/A";
 
-            Map<String, String> result = new HashMap<>();
+            Map<String, Object> result = new HashMap<>();
             result.put("status", status);
             result.put("url", url);
 
+            result.put("service", "jadx-ai-mcp"); result.put("instance_id", server.instanceId());
+            result.put("mode", "gui"); result.put("capabilities", server.capabilities());
+            java.util.List<java.nio.file.Path> files = mainWindow.getProject().getFilePaths();
+            result.put("project_name", files.isEmpty() ? "" : files.get(0).getFileName().toString());
+            ctx.json(result);
             logger.debug("JADX AI MCP Plugin: GOT HEALTH PING");
         } catch (Exception e) {
             JadxAIMCPPluginError.handleError(ctx, "Internal Error while trying to handle health ping request: " + e.getMessage(), e, logger);
