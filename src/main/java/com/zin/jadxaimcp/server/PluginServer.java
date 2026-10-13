@@ -12,7 +12,11 @@ import com.zin.jadxaimcp.server.routes.*; // MCP tool call's request handlers
 public class PluginServer {
     private static final Logger logger = LoggerFactory.getLogger(PluginServer.class);
     // JVM-wide key to store the ServerSocketChannel for cross-classloader shutdown
-    private static final String JVM_SERVER_KEY = "jadx-ai-mcp-server-channel";
+    private final String serverKey;
+    private final String instanceId = java.util.UUID.randomUUID().toString();
+    private final java.util.Set<String> capabilities = new java.util.TreeSet<>();
+    private InstanceRegistry registry;
+    private java.nio.channels.ServerSocketChannel ownedChannel;
     private final MainWindow mainWindow;
     private final int port;
     private Javalin app;
@@ -27,6 +31,7 @@ public class PluginServer {
      */
     public PluginServer(MainWindow mainWindow, int port) {
         this.mainWindow = mainWindow;
+        this.serverKey = "jadx-ai-mcp-server-channel." + System.identityHashCode(mainWindow) + "." + port;
         this.port = port;
         this.paginationUtils = new PaginationUtils();
     }
@@ -49,16 +54,19 @@ public class PluginServer {
                 config.showJavalinBanner = false;
             });
             security.install(app);
+            registerRoutes();
             app.start(security.host(), port);
 
             // Extract and store the underlying ServerSocketChannel (JDK class) JVM-wide
             // so future classloaders can close it even if the old classloader is broken
             storeServerSocketChannel();
 
-            // Register all route handlers
-            registerRoutes();
 
             isRunning = true;
+            try {
+                registry = new InstanceRegistry(instanceId, java.util.Map.of("service", "jadx-ai-mcp", "instance_id", instanceId,
+                        "pid", ProcessHandle.current().pid(), "host", security.host(), "port", app.port(), "mode", "gui"));
+            } catch (Exception error) { logger.warn("Cannot publish local instance registry: {}", error.getMessage()); }
 
             // Log startup success and banner
             logger.info(JadxAIMCPBanner.banner);
@@ -68,6 +76,7 @@ public class PluginServer {
         } catch (Exception e) {
             logger.error("JADX-AI-MCP Plugin Error: Could not start HTTP Server. Exception: " + e.getMessage(), e);
             isRunning = false;
+            stop();
             // Re-throw to let the main plugin know startup failed
             throw new RuntimeException("Failed to start Javalin Server", e);
         }
@@ -81,11 +90,14 @@ public class PluginServer {
             try {
                 scheduler.stopAdmission();
                 app.stop();
-                System.getProperties().remove(JVM_SERVER_KEY);
                 logger.info("JADX-AI-MCP Plugin: HTTP Server Stopped");
             } catch (Exception e) {
                 logger.error("JADX-AI-MCP Plugin Error: Error during shutdown: " + e.getMessage(), e);
             } finally {
+                if (ownedChannel != null) System.getProperties().remove(serverKey, ownedChannel);
+                if (registry != null) {
+                    try { registry.close(); } catch (java.io.IOException error) { logger.warn("Cannot remove instance registry", error); }
+                }
                 app = null;
                 isRunning = false;
             }
@@ -109,7 +121,8 @@ public class PluginServer {
             if (connectors != null && connectors.length > 0) {
                 Object transport = connectors[0].getClass().getMethod("getTransport").invoke(connectors[0]);
                 if (transport instanceof java.nio.channels.ServerSocketChannel) {
-                    System.getProperties().put(JVM_SERVER_KEY, transport);
+                    ownedChannel = (java.nio.channels.ServerSocketChannel) transport;
+                    System.getProperties().put(serverKey, transport);
                     logger.debug("JADX-AI-MCP Plugin: Stored ServerSocketChannel for cross-classloader cleanup");
                 }
             }
@@ -124,7 +137,7 @@ public class PluginServer {
      * methods on the broken old classloader's Javalin/Jetty objects.
      */
     private void closeExistingServerSocket() {
-        Object stored = System.getProperties().get(JVM_SERVER_KEY);
+        Object stored = System.getProperties().get(serverKey);
         if (stored instanceof java.nio.channels.ServerSocketChannel) {
             try {
                 java.nio.channels.ServerSocketChannel channel = (java.nio.channels.ServerSocketChannel) stored;
@@ -138,7 +151,7 @@ public class PluginServer {
             } catch (Exception e) {
                 logger.warn("JADX-AI-MCP Plugin: Error closing old server socket: " + e.getMessage());
             } finally {
-                System.getProperties().remove(JVM_SERVER_KEY);
+                System.getProperties().remove(serverKey, stored);
             }
         }
     }
@@ -154,14 +167,18 @@ public class PluginServer {
      * @return int The port number the server is configured to listen on
      */
     public int getPort() {
-        return port;
+        return app == null ? port : app.port();
     }
 
+    public String instanceId() { return instanceId; }
+    public java.util.List<String> capabilities() { return java.util.List.copyOf(capabilities); }
     public RequestScheduler scheduler() { return scheduler; }
     private void get(String path, io.javalin.http.Handler handler) {
+        capabilities.add(path.substring(1));
         app.get(path, ctx -> scheduler.handle(ctx, handler, projectRoutes::isLoading));
     }
     private void post(String path, io.javalin.http.Handler handler) {
+        capabilities.add(path.substring(1));
         app.post(path, ctx -> scheduler.handle(ctx, handler, projectRoutes::isLoading));
     }
 

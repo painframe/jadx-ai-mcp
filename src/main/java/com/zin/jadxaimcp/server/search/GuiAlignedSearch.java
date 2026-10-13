@@ -111,19 +111,19 @@ public final class GuiAlignedSearch {
         for (String key : locationKeys) {
             switch (key) {
                 case "class":
-                    drainUnique(new ClassSearchProvider(mainWindow, ss, searchClasses), out, neverCancel);
+                    drainUnique(new ClassSearchProvider(mainWindow, ss, searchClasses), out, neverCancel, SearchProgressTracker.forWindow(mainWindow));
                     break;
                 case "method":
-                    drainUnique(new MethodSearchProvider(mainWindow, ss, searchClasses), out, neverCancel);
+                    drainUnique(new MethodSearchProvider(mainWindow, ss, searchClasses), out, neverCancel, SearchProgressTracker.forWindow(mainWindow));
                     break;
                 case "field":
-                    drainUnique(new FieldSearchProvider(mainWindow, ss, searchClasses), out, neverCancel);
+                    drainUnique(new FieldSearchProvider(mainWindow, ss, searchClasses), out, neverCancel, SearchProgressTracker.forWindow(mainWindow));
                     break;
                 case "code":
-                    addCodeMatches(mainWindow, ss, pattern, searchClasses, out, neverCancel);
+                    addCodeMatches(mainWindow, ss, pattern, searchClasses, out, neverCancel, SearchProgressTracker.forWindow(mainWindow));
                     break;
                 case "comment":
-                    drainUnique(new CommentSearchProvider(mainWindow, ss, searchClasses), out, neverCancel);
+                    drainUnique(new CommentSearchProvider(mainWindow, ss, searchClasses), out, neverCancel, SearchProgressTracker.forWindow(mainWindow));
                     break;
                 default:
                     LOG.warn("JADX AI MCP: unknown search location key '{}', skipping", key);
@@ -136,7 +136,7 @@ public final class GuiAlignedSearch {
     private static final class SearchDeadline extends RuntimeException { }
 
     private static void addCodeMatches(MainWindow mainWindow, SearchSettings ss, SearchPattern pattern, List<JavaClass> searchClasses,
-            LinkedHashSet<JavaClass> out, Cancelable c) {
+            LinkedHashSet<JavaClass> out, Cancelable c, SearchProgressTracker tracker) {
         SearchSettings codeSettings = new SearchSettings(ss.getSearchString()) {
             @Override public jadx.api.JavaPackage getSearchPackage() { return ss.getSearchPackage(); }
             @Override public ISearchMethod getSearchMethod() {
@@ -164,30 +164,30 @@ public final class GuiAlignedSearch {
             }
         }
         if (searchClasses.size() == 1) {
-            drainUnique(new CodeSearchProvider(mainWindow, codeSettings, searchClasses, null), out, c);
+            drainUnique(new CodeSearchProvider(mainWindow, codeSettings, searchClasses, null), out, c, SearchProgressTracker.forWindow(mainWindow));
             return;
         }
         List<JavaClass> topClasses = ListUtils.filter(searchClasses, cls -> !cls.isInner());
         List<List<JavaClass>> batches = mainWindow.getWrapper().buildDecompileBatches(topClasses);
         Set<JavaClass> includedClasses = new HashSet<>(topClasses);
         for (List<JavaClass> batch : batches) {
-            drainUnique(new CodeSearchProvider(mainWindow, codeSettings, batch, includedClasses), out, c);
+            drainUnique(new CodeSearchProvider(mainWindow, codeSettings, batch, includedClasses), out, c, SearchProgressTracker.forWindow(mainWindow));
         }
     }
 
-    private static void drainUnique(ISearchProvider provider, LinkedHashSet<JavaClass> out, Cancelable c) {
+    private static void drainUnique(ISearchProvider provider, LinkedHashSet<JavaClass> out, Cancelable c, SearchProgressTracker tracker) {
         while (true) {
             JNode n;
             int before = provider.progress();
             n = provider.next(c);
-            for (int i = before; i < provider.progress(); i++) SearchProgressTracker.getInstance().incrementScanned();
+            for (int i = before; i < provider.progress(); i++) tracker.incrementScanned();
             if (c.isCanceled()) throw new SearchDeadline();
             if (n == null) {
                 break;
             }
             JavaClass jc = javaClassFromJNode(n);
             if (jc != null) {
-                if (out.add(jc)) SearchProgressTracker.getInstance().incrementMatches();
+                if (out.add(jc)) tracker.incrementMatches();
             }
         }
     }

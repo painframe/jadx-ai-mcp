@@ -34,7 +34,8 @@ public class JadxAIMCP implements JadxPlugin {
 
     // Keep track of the active plugin instance to handle multiple instantiations
     // correctly
-    private static JadxAIMCP activeInstance = null;
+    private static final java.util.Map<MainWindow, JadxAIMCP> ACTIVE = new java.util.IdentityHashMap<>();
+    private java.awt.event.WindowListener windowListener;
 
     // Config & State
     private int currentPort = DEFAULT_PORT;
@@ -79,12 +80,19 @@ public class JadxAIMCP implements JadxPlugin {
     }
 
     private void initializeWindow(MainWindow window) {
-        if (activeInstance != null) activeInstance.cleanup();
-        activeInstance = this;
+        synchronized (ACTIVE) {
+            JadxAIMCP previous = ACTIVE.get(window);
+            if (previous != null) previous.cleanup();
+            ACTIVE.put(window, this);
+        }
         try {
             mainWindow = window;
             prefs = Preferences.userNodeForPackage(JadxAIMCP.class);
-            currentPort = prefs.getInt(PREF_KEY_PORT, DEFAULT_PORT);
+            currentPort = Integer.parseInt(System.getProperty("jadx.mcp.port", System.getenv().getOrDefault("JADX_MCP_PORT", Integer.toString(prefs.getInt(PREF_KEY_PORT, DEFAULT_PORT)))));
+            windowListener = new java.awt.event.WindowAdapter() {
+                @Override public void windowClosed(java.awt.event.WindowEvent event) { cleanup(); }
+            };
+            mainWindow.addWindowListener(windowListener);
             pluginMenu = new PluginMenu(mainWindow, this);
             pluginMenu.addMenuItems();
             startServer();
@@ -168,8 +176,16 @@ public class JadxAIMCP implements JadxPlugin {
         try {
             if (pluginServer != null)
                 pluginServer.stop();
-            pluginServer = new PluginServer(mainWindow, currentPort);
-            pluginServer.start();
+            for (int attempt = 0; attempt < 16; attempt++) {
+                pluginServer = new PluginServer(mainWindow, currentPort);
+                try { pluginServer.start(); return; }
+                catch (RuntimeException error) {
+                    Throwable cause = error;
+                    while (cause.getCause() != null) cause = cause.getCause();
+                    if (!(cause instanceof java.net.BindException) || currentPort >= 65535 || attempt == 15) throw error;
+                    currentPort++;
+                }
+            }
         } catch (Exception e) {
             logger.error("JADX-AI-MCP Plugin: Failed to start server: " + e.getMessage());
         }
@@ -210,6 +226,8 @@ public class JadxAIMCP implements JadxPlugin {
 
     public void cleanup() {
         logger.info("JADX-AI-MCP Plugin: Cleaning up previous instance...");
+        synchronized (ACTIVE) { ACTIVE.remove(mainWindow, this); }
+        if (mainWindow != null && windowListener != null) mainWindow.removeWindowListener(windowListener);
         if (scheduler != null && !scheduler.isShutdown()) {
             scheduler.shutdownNow();
         }

@@ -50,7 +50,11 @@ public class SearchProgressTracker {
     // Error info
     private final AtomicReference<String> errorMessage = new AtomicReference<>(null);
 
-    private SearchProgressTracker() {
+    private static final Map<jadx.gui.ui.MainWindow, SearchProgressTracker> WINDOWS = new java.util.WeakHashMap<>();
+    public static synchronized SearchProgressTracker forWindow(jadx.gui.ui.MainWindow window) {
+        return WINDOWS.computeIfAbsent(window, ignored -> new SearchProgressTracker());
+    }
+    public SearchProgressTracker() {
     }
 
     public static SearchProgressTracker getInstance() {

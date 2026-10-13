@@ -26,10 +26,11 @@ public class MethodRoutes {
     private static final Logger logger = LoggerFactory.getLogger(MethodRoutes.class);
     private final MainWindow mainWindow;
     private final PaginationUtils paginationUtils;
-    private final SearchProgressTracker progressTracker = SearchProgressTracker.getInstance();
+    private final SearchProgressTracker progressTracker;
 
     public MethodRoutes(MainWindow mainWindow, PaginationUtils paginationUtils) {
         this.mainWindow = mainWindow;
+        this.progressTracker = SearchProgressTracker.forWindow(mainWindow);
         this.paginationUtils = paginationUtils;
     }
 
