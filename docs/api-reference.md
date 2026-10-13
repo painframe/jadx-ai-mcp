@@ -211,3 +211,5 @@ The Java runtime must permit launching its own `bin/java` executable.
 `GET /class-info?class_name=...` returns structured class, field and method metadata.
 `GET /method-signature?class_name=...&method_name=...` returns matching overloads,
 optionally filtered by `method_signature`, including descriptors and Frida types.
+
+`GET /search-native-methods?package=...&offset=0&limit=100` lists native method metadata, sorted by class/method signature. Package filtering matches full segments.

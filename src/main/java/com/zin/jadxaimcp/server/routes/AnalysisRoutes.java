@@ -64,6 +64,22 @@ public class AnalysisRoutes {
             ctx.json(Map.of("class_name", cls.getFullName(), "method_name", name, "overloads", signatures.size(), "signatures", signatures));
         } catch (Exception error) { JadxAIMCPPluginError.handleError(ctx, "Cannot read method metadata", error, LOG); }
     }
+    public void nativeMethods(Context ctx) {
+        try {
+            String packageName = ctx.queryParam("package");
+            List<JavaMethod> methods = nativeMethods(window.getWrapper().getIncludedClassesWithInners(), packageName);
+            ctx.json(pagination.handlePagination(ctx, methods, "native-methods", "methods", method -> methodInfo(method)));
+        } catch (Exception error) { JadxAIMCPPluginError.handleError(ctx, "Cannot search native methods", error, LOG); }
+    }
+    public static List<JavaMethod> nativeMethods(List<JavaClass> classes, String packageName) {
+        return classes.stream()
+                .filter(cls -> packageName == null || packageName.isBlank() || cls.getPackage().equals(packageName)
+                        || cls.getPackage().startsWith(packageName + "."))
+                .flatMap(cls -> cls.getMethods().stream()).filter(method -> method.getAccessFlags().isNative())
+                .sorted(Comparator.comparing(JavaMethod::getFullName)
+                        .thenComparing(method -> method.getMethodNode().getMethodInfo().getShortId()))
+                .collect(Collectors.toList());
+    }
     public static Map<String, Object> methodInfo(JavaMethod method) {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("method_name", method.getName()); result.put("class_name", method.getDeclaringClass().getFullName());
