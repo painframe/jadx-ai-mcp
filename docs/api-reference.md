@@ -217,3 +217,12 @@ optionally filtered by `method_signature`, including descriptors and Frida types
 Method signatures also accept `method(int, String):void` or `(int, String):void`; parameter counts and types must match. Descriptor signatures remain supported. Class resolution accepts original/raw or renamed full names. Method lookup misses return at most50 `candidates`; an omitted signature retains existing first-match behavior.
 
 Class source, smali and text-resource endpoints accept `max_bytes` (1..1048576) and `cursor`. Opt-in replies contain `content` and `continuation` (`next_cursor`, `generation`, `offset_bytes`, `total_bytes`, `max_bytes`). Chunks preserve UTF-8 characters; too-small budgets and changed-content/project cursors return400. Default responses are unchanged; binary resources remain unsupported for text continuation.
+
+`POST /batch-analysis` accepts `{operation, items, max_bytes}`. Operations:
+`class-source`, `method-by-name`, `xrefs-to-class`, `xrefs-to-method`, `xrefs-to-field`.
+Items are 1..50 scalar query-parameter maps; per-item count/limit is 1..1000.
+Response `{operation, results:[{index,ok,data}|{index,ok:false,error,code}]}` preserves
+structured data. Source items use continuation; other oversized items fail explicitly.
+Batch defaults to 65536 bytes per item, with at most4096 bytes metadata allowance.
+
+Batch serialized results are additionally capped at8MiB; remaining oversized items receive explicit errors.

@@ -167,6 +167,14 @@ public class PluginServer {
         XrefsRoutes xrefsRoutes = new XrefsRoutes(mainWindow);
         CommentRoutes commentRoutes = new CommentRoutes(mainWindow);
 
+        BatchRoutes batchRoutes = new BatchRoutes(java.util.Map.of(
+                "class-source", classRoutes::handleClassSource,
+                "method-by-name", methodRoutes::handleMethodByName,
+                "xrefs-to-class", xrefsRoutes::handleXrefsToClass,
+                "xrefs-to-method", xrefsRoutes::handleXrefsToMethod,
+                "xrefs-to-field", xrefsRoutes::handleXrefsToField), mainWindow);
+        app.post("/batch-analysis", batchRoutes::handle);
+
         // --- General & Health ---
         app.get("/health", generalRoutes::handleHealth);
         app.get("/class-info", analysisRoutes::classInfo);
