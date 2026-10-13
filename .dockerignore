@@ -1,0 +1,12 @@
+*
+!Dockerfile
+!pom.xml
+!src/
+!src/**
+!tests/
+!tests/fixtures/
+!tests/fixtures/*.jar
+!tests/fixtures/*.apk
+!docker/
+!docker/Dockerfile.gui
+!docker/gui-entrypoint.sh
