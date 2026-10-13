@@ -2,162 +2,82 @@ package com.zin.jadxaimcp.utils;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
+import jadx.gui.ui.MainWindow;
 import java.io.ByteArrayOutputStream;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicLong;
+import java.lang.ref.WeakReference;
+import java.util.*;
 import java.util.zip.Deflater;
 import java.util.zip.Inflater;
 
-/**
- * caches decompiled source in compressed form to keep memory usage down.
- *
- * each class source is stored as a compressed byte array instead of a raw string,
- * since large APKs can contain a lot of decompiled code.
- * this cache is thread-safe and intentionaly unbounded for a single loaded APK.
- * entries are kept in memory only and rebuilt as needed.
- *
- * if support for switching projects or loading multiple APKs is added later,
- * this cache should be cleared between loads.
- */
-
+/** Finite LRU source cache, isolated by GUI instance and project generation. */
 public class DecompilationCache {
-
     private static final Logger logger = LoggerFactory.getLogger(DecompilationCache.class);
-    private static final DecompilationCache INSTANCE = new DecompilationCache();
-
-    private final ConcurrentHashMap<String, byte[]> cache = new ConcurrentHashMap<>();
-
-    //observability counters
-    private final AtomicLong hits = new AtomicLong(0);
-    private final AtomicLong misses = new AtomicLong(0);
-    private final AtomicLong compressedBytes = new AtomicLong(0);
-    private final AtomicLong originalBytes = new AtomicLong(0);
-
-    private DecompilationCache() {
+    private static final int MAX_ENTRIES = 512;
+    private static final int MAX_COMPRESSED_BYTES = 64 * 1024 * 1024;
+    private static final int MAX_SOURCE_BYTES = 4 * 1024 * 1024;
+    private static final Map<MainWindow, DecompilationCache> INSTANCES = new WeakHashMap<>();
+    private static final DecompilationCache INSTANCE = new DecompilationCache(null);
+    private final WeakReference<MainWindow> owner;
+    private final LinkedHashMap<String, byte[]> cache = new LinkedHashMap<>(16, 0.75f, true);
+    private final Map<String, Integer> sizes = new HashMap<>();
+    private String generation = "";
+    private long hits, misses, compressedBytes, originalBytes;
+    private DecompilationCache(MainWindow window) { owner = new WeakReference<>(window); }
+    public static DecompilationCache getInstance() { return INSTANCE; }
+    public static synchronized DecompilationCache forWindow(MainWindow window) {
+        return INSTANCES.computeIfAbsent(window, DecompilationCache::new);
+    }
+    private void refresh() {
+        MainWindow window = owner.get();
+        if (window == null) return;
+        String current = ProjectState.generation(window);
+        if (!current.equals(generation)) { clear(); generation = current; }
+    }
+    public synchronized String generation() { refresh(); return generation; }
+    public synchronized void put(String name, String source) { put(name, source, generation()); }
+    public synchronized void put(String name, String source, String expectedGeneration) {
+        refresh();
+        if (!generation.equals(expectedGeneration)) return;
+        if (name == null || source == null || source.length() > MAX_SOURCE_BYTES) return;
+        byte[] raw = source.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        if (raw.length > MAX_SOURCE_BYTES) return;
+        byte[] compressed = compress(raw);
+        if (compressed == null) return;
+        invalidate(name);
+        cache.put(name, compressed); sizes.put(name, raw.length);
+        compressedBytes += compressed.length; originalBytes += raw.length;
+        while (cache.size() > MAX_ENTRIES || compressedBytes > MAX_COMPRESSED_BYTES) invalidate(cache.keySet().iterator().next());
+    }
+    public synchronized String get(String name) {
+        refresh();
+        byte[] bytes = cache.get(name);
+        if (bytes == null) { misses++; return null; }
+        String value = decompress(bytes);
+        if (value == null) { invalidate(name); misses++; return null; }
+        hits++; return value;
+    }
+    public synchronized boolean contains(String name) { refresh(); return cache.containsKey(name); }
+    public synchronized void invalidate(String name) {
+        byte[] removed = cache.remove(name);
+        if (removed != null) { compressedBytes -= removed.length; originalBytes -= sizes.remove(name); }
+    }
+    public synchronized void clear() {
+        cache.clear(); sizes.clear(); hits = misses = compressedBytes = originalBytes = 0;
+    }
+    public synchronized Map<String, Object> getStats() {
+        refresh();
+        Map<String, Object> result = new HashMap<>();
+        result.put("cached_classes", cache.size()); result.put("hits", hits); result.put("misses", misses);
+        result.put("hit_rate", hits + misses == 0 ? "N/A" : String.format(java.util.Locale.ROOT, "%.1f%%", 100.0 * hits / (hits + misses)));
+        result.put("compressed_bytes", compressedBytes); result.put("original_bytes", originalBytes);
+        result.put("compressed_mb", String.format(java.util.Locale.ROOT, "%.1f", compressedBytes / 1048576.0));
+        result.put("original_mb", String.format(java.util.Locale.ROOT, "%.1f", originalBytes / 1048576.0));
+        result.put("compression_ratio", compressedBytes == 0 ? "N/A" : String.format(java.util.Locale.ROOT, "%.1fx", (double) originalBytes / compressedBytes));
+        result.put("max_entries", MAX_ENTRIES); result.put("max_compressed_bytes", MAX_COMPRESSED_BYTES);
+        result.put("max_source_bytes", MAX_SOURCE_BYTES); result.put("generation", generation);
+        return result;
     }
 
-    public static DecompilationCache getInstance() {
-        return INSTANCE;
-    }
-
-    /**
-     * store a decompiled source string for the given class name.
-     * Compresses the source using Deflate level 1 (BEST_SPEED).
-     *
-     * @param className fully qualified class name
-     * @param source    decompiled Java source code
-     */
-    public void put(String className, String source) {
-        if (className == null || source == null) return;
-        byte[] sourceBytes = source.getBytes(java.nio.charset.StandardCharsets.UTF_8);
-        byte[] compressed = compress(sourceBytes);
-        if (compressed != null) {
-            byte[] previous = cache.put(className, compressed);
-            if (previous == null) {
-                // New entry -- track size
-                compressedBytes.addAndGet(compressed.length);
-                originalBytes.addAndGet(sourceBytes.length);
-            } else {
-                // replacement -- adjust size delta
-                compressedBytes.addAndGet(compressed.length - previous.length);
-                // originalBytes is approximate; don't bother adjusting for replacements
-            }
-        }
-    }
-
-    /**
-     * retrieve and decompress the cached source for a class.
-     * Updates hit/miss counters for observability.
-     *
-     * @param className fully qualified class name
-     * @return decompiled source string, or null if not cached
-     */
-    public String get(String className) {
-        byte[] compressed = cache.get(className);
-        if (compressed == null) {
-            misses.incrementAndGet();
-            return null;
-        }
-        String decompressed = decompress(compressed);
-        if (decompressed == null) {
-            // Evict corrupt entry so the next lookup re-decompiles
-            cache.remove(className);
-            misses.incrementAndGet();
-            return null;
-        }
-        hits.incrementAndGet();
-        return decompressed;
-    }
-
-    /**
-     * check if a class is in the cache without counting as a hit/miss.
-     */
-    public boolean contains(String className) {
-        return cache.containsKey(className);
-    }
-
-    /**
-     * remove a single cached class source, so the next request decompiles it again.
-     * Call this after the code of a class changed (e.g. a comment was added),
-     * otherwise the stale pre-change source keeps being served.
-     *
-     * @param className fully qualified class name
-     */
-    public void invalidate(String className) {
-        if (className == null) return;
-        byte[] removed = cache.remove(className);
-        if (removed != null) {
-            // originalBytes is approximate, only the compressed size is tracked back
-            compressedBytes.addAndGet(-removed.length);
-            logger.info("DecompilationCache invalidated entry for {}", className);
-        }
-    }
-
-    /**
-     * Clear the entire cache and reset all counters.
-     * Call this when opening a new APK/project or for debugging.
-     */
-    public void clear() {
-        int size = cache.size();
-        long compBytes = compressedBytes.get();
-        cache.clear();
-        hits.set(0);
-        misses.set(0);
-        compressedBytes.set(0);
-        originalBytes.set(0);
-        logger.info("DecompilationCache cleared: evicted {} entries ({} bytes compressed)", size, compBytes);
-    }
-
-    /**
-     * get cache statistics as a Map suitable for JSON serialization.
-     */
-    public Map<String, Object> getStats() {
-        Map<String, Object> stats = new java.util.HashMap<>();
-        long h = hits.get();
-        long m = misses.get();
-        long total = h + m;
-        stats.put("cached_classes", cache.size());
-        stats.put("hits", h);
-        stats.put("misses", m);
-        stats.put("hit_rate", total > 0 ? String.format("%.1f%%", (h * 100.0) / total) : "N/A");
-        stats.put("compressed_bytes", compressedBytes.get());
-        stats.put("compressed_mb", String.format("%.1f", compressedBytes.get() / (1024.0 * 1024.0)));
-        stats.put("original_bytes", originalBytes.get());
-        stats.put("original_mb", String.format("%.1f", originalBytes.get() / (1024.0 * 1024.0)));
-        long origBytes = originalBytes.get();
-        long compBytes = compressedBytes.get();
-        stats.put("compression_ratio", compBytes > 0 ? String.format("%.1fx", (double) origBytes / compBytes) : "N/A");
-        return stats;
-    }
-
-    // Compression helpers
-
-    /**
-     * compress a byte array using Deflate level 1 (BEST_SPEED).
-     * Level 1 compresses at ~500 MB/s with 8-15x ratio on Java source ( according to some AI calculations....).
-     */
     private static byte[] compress(byte[] data) {
         Deflater deflater = new Deflater(Deflater.BEST_SPEED);
         try {
@@ -192,6 +112,7 @@ public class DecompilationCache {
             while (!inflater.finished()) {
                 int count = inflater.inflate(buffer);
                 if (count > 0) {
+                    if (out.size() + count > MAX_SOURCE_BYTES) return null;
                     out.write(buffer, 0, count);
                 } else if (!inflater.finished()) {
                     logger.warn("Failed to decompress source: inflater stalled");

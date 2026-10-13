@@ -51,7 +51,7 @@ public class ClassRoutes {
     private final MainWindow mainWindow;
     private final PaginationUtils paginationUtils;
     private final SearchProgressTracker progressTracker = SearchProgressTracker.getInstance();
-    private final DecompilationCache decompilationCache = DecompilationCache.getInstance();
+    private final DecompilationCache decompilationCache;
 
     /**
      * Enum for specifying search locations in handleSearchClassesByKeyword.
@@ -84,6 +84,7 @@ public class ClassRoutes {
 
     public ClassRoutes(MainWindow mainWindow, PaginationUtils paginationUtils) {
         this.mainWindow = mainWindow;
+        this.decompilationCache = DecompilationCache.forWindow(mainWindow);
         this.paginationUtils = paginationUtils;
     }
 
@@ -205,13 +206,14 @@ public class ClassRoutes {
         // className = className.replace('$', '.');
 
         try {
+            String sourceGeneration = decompilationCache.generation();
             JadxWrapper wrapper = mainWindow.getWrapper();
             for (JavaClass cls : wrapper.getIncludedClassesWithInners()) {
                 if ((cls.getFullName().equals(className) || cls.getRawName().equals(className))) {
                     String code = decompilationCache.get(className);
                     if (code == null) {
                         code = cls.getCode();
-                        decompilationCache.put(className, code);
+                        decompilationCache.put(className, code, sourceGeneration);
                     }
                     if (ResponseContinuations.send(ctx, mainWindow, "class:" + className, code)) return;
                     ctx.result(code);
@@ -357,6 +359,7 @@ public class ClassRoutes {
      */
     public void handleMainActivity(Context ctx) {
         try {
+            String sourceGeneration = decompilationCache.generation();
             JadxWrapper wrapper = mainWindow.getWrapper();
             ResourceFile manifestRes = AndroidManifestParser.getAndroidManifest(mainWindow.getWrapper().getResources());
             if (manifestRes == null) {
@@ -388,7 +391,7 @@ public class ClassRoutes {
             }
 
             String cachedCode = decompilationCache.get(mainActivityClass.getFullName());
-            String code = cachedCode != null ? cachedCode : cacheAndReturn(mainActivityClass);
+            String code = cachedCode != null ? cachedCode : cacheAndReturn(mainActivityClass, sourceGeneration);
             ctx.json(Map.of("name", mainActivityClass.getFullName(), "type", "code/java", "content", code));
         } catch (Exception e) {
             JadxAIMCPPluginError.handleError(ctx,
@@ -487,6 +490,7 @@ public class ClassRoutes {
      */
     public void handleMainApplicationClassesCode(Context ctx) {
         try {
+            String sourceGeneration = decompilationCache.generation();
             JadxWrapper wrapper = mainWindow.getWrapper();
             List<ResourceFile> resources = wrapper.getResources();
 
@@ -536,7 +540,7 @@ public class ClassRoutes {
                     String code = decompilationCache.get(cls.getFullName());
                     if (code == null) {
                         code = cls.getCode();
-                        decompilationCache.put(cls.getFullName(), code);
+                        decompilationCache.put(cls.getFullName(), code, sourceGeneration);
                     }
                     classInfo.put("content", code);
                     logger.debug("JADX AI MCP: Successfully got code for " + cls.getFullName() +
@@ -840,7 +844,8 @@ public class ClassRoutes {
      * clears the decompilation cache and resets all counters.
      */
     public void handleCacheClear(Context ctx) {
-        decompilationCache.clear();
+        com.zin.jadxaimcp.utils.ProjectState.invalidate(mainWindow);
+            decompilationCache.clear();
         ctx.json(Map.of("status", "cleared", "stats", decompilationCache.getStats()));
     }
 
@@ -875,10 +880,10 @@ public class ClassRoutes {
     /**
      * decompile a class, store in cache, and return the source code.
      */
-    private String cacheAndReturn(JavaClass cls) {
+    private String cacheAndReturn(JavaClass cls, String sourceGeneration) {
         String code = cls.getCode();
         if (code != null) {
-            decompilationCache.put(cls.getFullName(), code);
+            decompilationCache.put(cls.getFullName(), code, sourceGeneration);
         }
         return code;
     }

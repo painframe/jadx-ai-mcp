@@ -226,3 +226,5 @@ structured data. Source items use continuation; other oversized items fail expli
 Batch defaults to 65536 bytes per item, with at most4096 bytes metadata allowance.
 
 Batch serialized results are additionally capped at8MiB; remaining oversized items receive explicit errors.
+
+Source caches are scoped to each GUI window and project generation: LRU512entries,64MiB compressed,4MiB maximum source entry. Stats expose those limits and generation. Project replacement, MCP renames/comments and explicit cache clear invalidate the generation and continuation cursors. Oversized sources remain readable but are not cached.
