@@ -195,3 +195,15 @@ Returns locals/fields from current debug context.
 ## Tool Count
 
 Current MCP tool count exposed by `jadx_mcp_server.py`: **34**.
+
+### Pattern search flags
+
+`search-classes-by-keyword` accepts `regex=true|false` and
+`case_sensitive=true|false` (both default false). Expressions retain their case;
+invalid expressions/flags return structured HTTP 400. Regex expressions are
+limited to 1024 characters and each input to 4 Mi characters. Each regex search
+uses one disposable JVM, with four concurrent workers maximum and a 64 MiB heap.
+Each match has a two-second execution deadline; timeout kills and reaps the
+process, including zero-width loops which never inspect input characters.
+Initialization has a five-second deadline. Literal search does not spawn a JVM.
+The Java runtime must permit launching its own `bin/java` executable.
