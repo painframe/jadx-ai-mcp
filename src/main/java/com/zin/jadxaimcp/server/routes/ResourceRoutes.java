@@ -12,7 +12,6 @@ import jadx.core.utils.android.AppAttribute;
 import jadx.core.utils.android.ApplicationParams;
 import jadx.core.utils.exceptions.JadxRuntimeException;
 import jadx.core.xmlgen.ResContainer;
-import jadx.gui.JadxWrapper;
 import jadx.gui.ui.MainWindow;
 
 import org.slf4j.Logger;
@@ -40,11 +39,15 @@ import com.zin.jadxaimcp.utils.JadxAIMCPPluginError;
 
 public class ResourceRoutes {
     private static final Logger logger = LoggerFactory.getLogger(ResourceRoutes.class);
-    private final MainWindow mainWindow;
+    private final java.util.function.Supplier<List<ResourceFile>> resources;
+    private final java.util.function.Supplier<String> generation;
     private final PaginationUtils paginationUtils;
 
     public ResourceRoutes(MainWindow mainWindow) {
-        this.mainWindow = mainWindow;
+        this(() -> mainWindow.getWrapper().getResources(), () -> com.zin.jadxaimcp.utils.ProjectState.generation(mainWindow));
+    }
+    public ResourceRoutes(java.util.function.Supplier<List<ResourceFile>> resources, java.util.function.Supplier<String> generation) {
+        this.resources = resources; this.generation = generation;
         this.paginationUtils = new PaginationUtils();
     }
 
@@ -89,7 +92,7 @@ public class ResourceRoutes {
     public void handleStrings(Context ctx) {
         try {
             List<Map<String, String>> allStringEntries = new ArrayList<>();
-            List<ResourceFile> resourceFiles = mainWindow.getWrapper().getResources();
+            List<ResourceFile> resourceFiles = resources.get();
 
             for (ResourceFile resFile : resourceFiles) {
                 try {
@@ -148,7 +151,7 @@ public class ResourceRoutes {
         }
 
         try {
-            List<ResourceFile> resourceFiles = mainWindow.getWrapper().getResources();
+            List<ResourceFile> resourceFiles = resources.get();
             String matchedFileName = null;
             String matchedContent = null;
             boolean matchedNonText = false;
@@ -213,7 +216,7 @@ public class ResourceRoutes {
                 return;
             }
 
-            if (ResponseContinuations.send(ctx, mainWindow, "resource:" + matchedFileName, matchedContent,
+            if (ResponseContinuations.send(ctx, generation.get(), "resource:" + matchedFileName, matchedContent,
                     Map.of("file_name", matchedFileName, "type", "resource/text"))) return;
             Map<String, String> file = new HashMap<>();
             file.put("file_name", matchedFileName);
@@ -241,8 +244,8 @@ public class ResourceRoutes {
      */
     public void handleListAllResourceFilesNames(Context ctx) {
         try {
-            JadxWrapper wrapper = mainWindow.getWrapper();
-            List<ResourceFile> resourceFiles = wrapper.getResources();
+
+            List<ResourceFile> resourceFiles = resources.get();
             List<String> resourceFileNames = new ArrayList<>();
 
             for (ResourceFile resFile : resourceFiles) {
@@ -327,6 +330,6 @@ public class ResourceRoutes {
      * This helper method is used to get the android manifest file using jadx's AndroidManifestParser class.
      */
     private ResourceFile getManifestFile() {
-        return AndroidManifestParser.getAndroidManifest(mainWindow.getWrapper().getResources());
+        return AndroidManifestParser.getAndroidManifest(resources.get());
     }
 }

@@ -4,7 +4,6 @@ import io.javalin.http.Context;
 
 import jadx.api.JavaClass;
 import jadx.api.JavaMethod;
-import jadx.gui.JadxWrapper;
 import jadx.gui.ui.MainWindow;
 
 import org.slf4j.Logger;
@@ -24,14 +23,15 @@ import com.zin.jadxaimcp.utils.SearchProgressTracker;
 
 public class MethodRoutes {
     private static final Logger logger = LoggerFactory.getLogger(MethodRoutes.class);
-    private final MainWindow mainWindow;
+    private final java.util.function.Supplier<List<JavaClass>> classes;
     private final PaginationUtils paginationUtils;
     private final SearchProgressTracker progressTracker;
 
     public MethodRoutes(MainWindow mainWindow, PaginationUtils paginationUtils) {
-        this.mainWindow = mainWindow;
-        this.progressTracker = SearchProgressTracker.forWindow(mainWindow);
-        this.paginationUtils = paginationUtils;
+        this(() -> mainWindow.getWrapper().getIncludedClassesWithInners(), paginationUtils, SearchProgressTracker.forWindow(mainWindow));
+    }
+    public MethodRoutes(java.util.function.Supplier<List<JavaClass>> classes, PaginationUtils paginationUtils, SearchProgressTracker progress) {
+        this.classes = classes; this.paginationUtils = paginationUtils; this.progressTracker = progress;
     }
 
     /**
@@ -56,7 +56,7 @@ public class MethodRoutes {
 
         String methodName = validateMethodParam(ctx);
         if (methodName == null) return;
-        
+
         // Support signature embedded in method_name
         if (methodName.contains("(")) {
             if (methodSignature == null || methodSignature.isEmpty()) {
@@ -66,16 +66,16 @@ public class MethodRoutes {
         }
 
         try {
-            JadxWrapper wrapper = mainWindow.getWrapper();
-            MethodSignatures.ensureUnambiguous(wrapper.getIncludedClassesWithInners(), className, methodName, methodSignature);
-            if (wrapper == null) {
+
+            MethodSignatures.ensureUnambiguous(classes.get(), className, methodName, methodSignature);
+            if (classes.get() == null) {
                 JadxAIMCPPluginError.handleError(ctx, 500, "JadxWrapper not initialized", logger);
                 return;
             }
 
             // Case 1: Search in all classes if no class name provided
             if (className == null || className.isEmpty()) {
-                for (JavaClass cls : wrapper.getIncludedClassesWithInners()) {
+                for (JavaClass cls : classes.get()) {
                     for (JavaMethod method : cls.getMethods()) {
                         if (method.getName().equalsIgnoreCase(methodName)) {
                             if (!MethodSignatures.matches(method, methodSignature)) {
@@ -89,7 +89,7 @@ public class MethodRoutes {
             } 
             // Case 2: Search in specific class
             else {
-                for (JavaClass cls : wrapper.getIncludedClassesWithInners()) {
+                for (JavaClass cls : classes.get()) {
                     if ((cls.getFullName().equals(className) || cls.getRawName().equals(className))) {
                         for (JavaMethod method : cls.getMethods()) {
                             if (method.getName().equalsIgnoreCase(methodName)) {
@@ -106,7 +106,7 @@ public class MethodRoutes {
 
             // if execution reaches here, it means that method has not been found
             java.util.List<String> candidates = new java.util.ArrayList<>();
-            for (JavaClass cls : wrapper.getIncludedClassesWithInners()) {
+            for (JavaClass cls : classes.get()) {
                 if (className == null || className.isEmpty() || cls.getFullName().equals(className) || cls.getRawName().equals(className)) {
                     candidates.addAll(MethodSignatures.available(cls));
                     if (candidates.size() >= 50) break;
@@ -139,12 +139,12 @@ public class MethodRoutes {
         if (methodName == null) return;
 
         try {
-            JadxWrapper wrapper = mainWindow.getWrapper();
-            if (wrapper == null) {
+
+            if (classes.get() == null) {
                 JadxAIMCPPluginError.handleError(ctx, 500, "JadxWrapper not initialized", logger);
                 return;
             }
-            List<JavaClass> allClasses = wrapper.getIncludedClassesWithInners();
+            List<JavaClass> allClasses = classes.get();
             String searchId = progressTracker.startSearch("method:" + methodName, allClasses.size());
 
             try {

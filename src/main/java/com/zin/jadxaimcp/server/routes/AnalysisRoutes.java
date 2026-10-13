@@ -12,17 +12,20 @@ import java.util.stream.Collectors;
 
 public class AnalysisRoutes {
     private static final Logger LOG = LoggerFactory.getLogger(AnalysisRoutes.class);
-    private final MainWindow window;
+    private final java.util.function.Supplier<List<JavaClass>> classes;
     private final PaginationUtils pagination;
     public AnalysisRoutes(MainWindow window, PaginationUtils pagination) {
-        this.window = window; this.pagination = pagination;
+        this(() -> window.getWrapper().getIncludedClassesWithInners(), pagination);
+    }
+    public AnalysisRoutes(java.util.function.Supplier<List<JavaClass>> classes, PaginationUtils pagination) {
+        this.classes = classes; this.pagination = pagination;
     }
     private JavaClass findClass(Context ctx) {
         String name = ctx.queryParam("class_name");
         if (name == null || name.isBlank()) {
             JadxAIMCPPluginError.handleError(ctx, 400, "Missing class_name", LOG); return null;
         }
-        for (JavaClass cls : window.getWrapper().getIncludedClassesWithInners()) {
+        for (JavaClass cls : classes.get()) {
             if (name.equals(cls.getFullName()) || name.equals(cls.getRawName())) return cls;
         }
         JadxAIMCPPluginError.handleError(ctx, 404, "Class not found: " + name, LOG); return null;
@@ -67,7 +70,7 @@ public class AnalysisRoutes {
     public void nativeMethods(Context ctx) {
         try {
             String packageName = ctx.queryParam("package");
-            List<JavaMethod> methods = nativeMethods(window.getWrapper().getIncludedClassesWithInners(), packageName);
+            List<JavaMethod> methods = nativeMethods(classes.get(), packageName);
             ctx.json(pagination.handlePagination(ctx, methods, "native-methods", "methods", method -> methodInfo(method)));
         } catch (Exception error) { JadxAIMCPPluginError.handleError(ctx, "Cannot search native methods", error, LOG); }
     }

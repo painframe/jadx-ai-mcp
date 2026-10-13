@@ -11,9 +11,15 @@ import java.util.*;
 public final class BatchRoutes {
     private final Map<String, Handler> handlers;
     private final Gson gson = new Gson();
-    private final jadx.gui.ui.MainWindow window;
+    private final java.util.function.Supplier<String> generation;
     public BatchRoutes(Map<String, Handler> handlers, jadx.gui.ui.MainWindow window) {
-        this.handlers = Map.copyOf(handlers); this.window = window;
+        this(handlers, () -> com.zin.jadxaimcp.utils.ProjectState.generation(window));
+    }
+    private BatchRoutes(Map<String, Handler> handlers, java.util.function.Supplier<String> generation) {
+        this.handlers = Map.copyOf(handlers); this.generation = generation;
+    }
+    public static BatchRoutes withGeneration(Map<String, Handler> handlers, java.util.function.Supplier<String> generation) {
+        return new BatchRoutes(handlers, generation);
     }
     public void handle(Context ctx) {
         try {
@@ -68,7 +74,7 @@ public final class BatchRoutes {
                         if (code instanceof String) {
                             String identity = "method:" + method.get("class_name") + ":" + method.get("method_name") + ":" + method.get("decl");
                             method.putAll(com.zin.jadxaimcp.utils.ResponseContinuations.chunk((String) code, identity,
-                                    com.zin.jadxaimcp.utils.ProjectState.generation(window), maximum, parameters.get("cursor")));
+                                    generation.get(), maximum, parameters.get("cursor")));
                             response[0] = method;
                         }
                     }

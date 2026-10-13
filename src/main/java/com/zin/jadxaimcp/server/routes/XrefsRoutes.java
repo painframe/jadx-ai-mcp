@@ -8,7 +8,6 @@ import jadx.api.JavaMethod;
 import jadx.core.dex.nodes.ClassNode;
 import jadx.core.dex.nodes.FieldNode;
 import jadx.core.dex.nodes.MethodNode;
-import jadx.gui.JadxWrapper;
 import jadx.gui.ui.MainWindow;
 
 import org.slf4j.Logger;
@@ -28,11 +27,14 @@ import com.zin.jadxaimcp.utils.JadxAIMCPPluginError;
 
 public class XrefsRoutes {
     private static final Logger logger = LoggerFactory.getLogger(XrefsRoutes.class);
-    private final MainWindow mainWindow;
+    private final java.util.function.Supplier<List<JavaClass>> classes;
     private final PaginationUtils paginationUtils;
 
     public XrefsRoutes(MainWindow mainWindow) {
-        this.mainWindow = mainWindow;
+        this(() -> mainWindow.getWrapper().getIncludedClassesWithInners());
+    }
+    public XrefsRoutes(java.util.function.Supplier<List<JavaClass>> classes) {
+        this.classes = classes;
         this.paginationUtils = new PaginationUtils();
     }
 
@@ -222,7 +224,7 @@ public class XrefsRoutes {
         }
     }
     // Helper methods
-    
+
     /**
      * 
      * @param Context, String
@@ -252,8 +254,8 @@ public class XrefsRoutes {
      * return null.
      */
     private JavaClass findClassByName(Context ctx, String className) {
-        JadxWrapper wrapper = mainWindow.getWrapper();
-        for (JavaClass cls : wrapper.getIncludedClassesWithInners()) {
+
+        for (JavaClass cls : classes.get()) {
             if ((cls.getFullName().equals(className) || cls.getRawName().equals(className))) return cls;
         }
         JadxAIMCPPluginError.handleError(ctx, 404, "Class " + className + " not found.", logger);
@@ -393,7 +395,7 @@ public class XrefsRoutes {
             }
         }
     }
-    
+
     /**
      * @return List<JavaMethod>
      * @param JavaMethod
