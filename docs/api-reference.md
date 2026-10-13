@@ -207,3 +207,7 @@ Each match has a two-second execution deadline; timeout kills and reaps the
 process, including zero-width loops which never inspect input characters.
 Initialization has a five-second deadline. Literal search does not spawn a JVM.
 The Java runtime must permit launching its own `bin/java` executable.
+
+`GET /class-info?class_name=...` returns structured class, field and method metadata.
+`GET /method-signature?class_name=...&method_name=...` returns matching overloads,
+optionally filtered by `method_signature`, including descriptors and Frida types.
