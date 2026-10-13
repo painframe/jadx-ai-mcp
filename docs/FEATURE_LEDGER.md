@@ -23,3 +23,5 @@ Tests use disposable APK/JAR fixtures, never a user project. Donor binaries and 
 | 11 Batch analysis | feat/batch-analysis | xjoker@30337f6f072aa360e9099c99e99fb330d44e8986 | existing-handler capture; mixed outcomes/deny mutation tests; Maven package | Python feat/batch-analysis |
 
 | 12 Bounded analysis caches | feat/bounded-analysis-caches | xjoker cache intent@30337f6f072aa360e9099c99e99fb330d44e8986 | finite LRU, window isolation,generation invalidation,exact size tests; Maven package | Python feat/bounded-analysis-caches |
+
+| 13 APK loading | feat/apk-loading | hnhcsl@50781c0987f008703ee0f0c735b8e3efb611b5cd | unsaved-project replacement denial,actual load callback contract; Maven package | Python feat/apk-loading |

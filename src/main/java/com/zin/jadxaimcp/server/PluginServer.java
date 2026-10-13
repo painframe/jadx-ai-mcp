@@ -157,6 +157,15 @@ public class PluginServer {
     private void registerRoutes() {
         // Instantiate Route Controllers
         // Passing 'mainWindow' and 'paginationUtils' to them so they can do their work
+        ProjectRoutes projectRoutes = new ProjectRoutes(mainWindow);
+        app.before(ctx -> {
+            if (projectRoutes.isLoading() && !java.util.Set.of("/health", "/project-operation", "/open-apk", "/runtime-diagnostics").contains(ctx.path())) {
+                ctx.status(503).json(com.zin.jadxaimcp.utils.JadxAIMCPPluginError.response(503, "Project loading; retry after it is ready"));
+                ctx.skipRemainingHandlers();
+            }
+        });
+        app.post("/open-apk", projectRoutes::open);
+        app.get("/project-operation", projectRoutes::status);
         AnalysisRoutes analysisRoutes = new AnalysisRoutes(mainWindow, paginationUtils);
         GeneralRoutes generalRoutes = new GeneralRoutes(mainWindow, port, this);
         ClassRoutes classRoutes = new ClassRoutes(mainWindow, paginationUtils);
