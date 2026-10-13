@@ -150,18 +150,18 @@ public class DebugRoutes {
     private JDebuggerPanel getDebuggerPanel(Context ctx) {
         JDebuggerPanel panel = mainWindow.getDebuggerPanel();
         if (panel == null) {
-            ctx.status(400).json(Map.of("error", "Debugger panel not initialized"));
+            ctx.status(400).json(JadxAIMCPPluginError.response(400, "Debugger panel not initialized"));
             return null;
         }
 
         IDebugController controller = panel.getDbgController();
         if (controller == null || !controller.isDebugging()) {
-            ctx.status(400).json(Map.of("error", "Debugger not attached"));
+            ctx.status(400).json(JadxAIMCPPluginError.response(400, "Debugger not attached"));
             return null;
         }
 
         if (!controller.isSuspended()) {
-            ctx.status(400).json(Map.of("error", "Process not suspended. Data only available when paused."));
+            ctx.status(400).json(JadxAIMCPPluginError.response(400, "Process not suspended. Data only available when paused."));
             return null;
         }
         return panel;
