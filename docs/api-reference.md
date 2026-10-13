@@ -228,3 +228,12 @@ Batch defaults to 65536 bytes per item, with at most4096 bytes metadata allowanc
 Batch serialized results are additionally capped at8MiB; remaining oversized items receive explicit errors.
 
 Source caches are scoped to each GUI window and project generation: LRU512entries,64MiB compressed,4MiB maximum source entry. Stats expose those limits and generation. Project replacement, MCP renames/comments and explicit cache clear invalidate the generation and continuation cursors. Oversized sources remain readable but are not cached.
+
+`POST /open-apk` accepts `{path,replace:false}` for a backend-local readable file.
+It returns202 and an operation_id; `GET /project-operation?operation_id=...` reports
+loading/ready/failed. Ready requires a new decompiler and the requested project
+path on JADX's load callback. Unsaved projects are rejected even with replace=true;
+save them manually first. Only one active operation is accepted; status is retained
+across plugin reconstruction. A five-minute missing-completion deadline reports
+failure without pretending the GUI load was cancelled. GUI discovery is bounded
+and starts the listener before an APK is open.

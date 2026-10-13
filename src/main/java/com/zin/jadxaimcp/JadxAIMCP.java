@@ -61,38 +61,34 @@ public class JadxAIMCP implements JadxPlugin {
 
     @Override
     public void init(JadxPluginContext context) {
-        if (context.getGuiContext() == null) {
-            logger.info("JADX-AI-MCP Plugin: Running in non-GUI mode, plugin features disabled.");
-            return;
-        }
-
-        // Cleanup previous instance if JADX initializes the plugin multiple times
-        if (activeInstance != null) {
-            activeInstance.cleanup();
-        }
-        activeInstance = this;
-
-        try {
-            this.mainWindow = (MainWindow) context.getGuiContext().getMainFrame();
-            if (this.mainWindow == null) {
-                logger.error("JADX-AI-MCP Plugin: Main Window is null.");
-                return;
+        if (java.awt.GraphicsEnvironment.isHeadless()) return;
+        final int[] attempts = {0};
+        javax.swing.Timer discovery = new javax.swing.Timer(500, null);
+        discovery.addActionListener(event -> {
+            MainWindow found = context.getGuiContext() == null ? null : (MainWindow) context.getGuiContext().getMainFrame();
+            if (found == null) {
+                for (java.awt.Frame frame : java.awt.Frame.getFrames()) {
+                    if (frame instanceof MainWindow) { found = (MainWindow) frame; break; }
+                }
             }
+            if (found != null) { discovery.stop(); initializeWindow(found); }
+            else if (++attempts[0] >= 60) { discovery.stop(); logger.warn("JADX GUI discovery timed out"); }
+        });
+        discovery.setInitialDelay(0);
+        discovery.start();
+    }
 
-            // 1. Initialize Config
+    private void initializeWindow(MainWindow window) {
+        if (activeInstance != null) activeInstance.cleanup();
+        activeInstance = this;
+        try {
+            mainWindow = window;
             prefs = Preferences.userNodeForPackage(JadxAIMCP.class);
             currentPort = prefs.getInt(PREF_KEY_PORT, DEFAULT_PORT);
-
-            // 2. Initialize UI
-            this.pluginMenu = new PluginMenu(mainWindow, this);
-            this.pluginMenu.addMenuItems();
-
-            // 3. Start Server Lifecycle
-            logger.info("JADX-AI-MCP Plugin: Initializing...");
-            startDelayedInitialization();
-        } catch (Exception e) {
-            logger.error("JADX-AI-MCP Plugin: Initialization error: " + e.getMessage(), e);
-        }
+            pluginMenu = new PluginMenu(mainWindow, this);
+            pluginMenu.addMenuItems();
+            startServer();
+        } catch (Exception error) { logger.error("JADX plugin initialization failed", error); }
     }
 
     // ---- Server lifecycle management ---
