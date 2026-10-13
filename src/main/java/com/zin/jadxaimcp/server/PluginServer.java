@@ -38,6 +38,7 @@ public class PluginServer {
      */
     public void start() {
         try {
+            TransportSecurity security = TransportSecurity.fromEnvironment();
             // This solves github issue -> #81
             // Close any existing server socket from a previous classloader
             // (e.g. after Reset Code Cache)
@@ -46,7 +47,9 @@ public class PluginServer {
             // Configure and start Javalin
             app = Javalin.create(config -> {
                 config.showJavalinBanner = false;
-            }).start(port);
+            });
+            security.install(app);
+            app.start(security.host(), port);
 
             // Extract and store the underlying ServerSocketChannel (JDK class) JVM-wide
             // so future classloaders can close it even if the old classloader is broken
@@ -60,7 +63,7 @@ public class PluginServer {
             // Log startup success and banner
             logger.info(JadxAIMCPBanner.banner);
             logger.info("// -------------------- JADX AI MCP PLUGIN -------------------- //");
-            logger.info("JADX AI MCP Plugin HTTP Server Started at http://127.0.0.1:" + port + "/");
+            logger.info("JADX AI MCP Plugin HTTP Server Started on {}:{} (authentication: {})", security.host(), port, security.authenticated());
 
         } catch (Exception e) {
             logger.error("JADX-AI-MCP Plugin Error: Could not start HTTP Server. Exception: " + e.getMessage(), e);
