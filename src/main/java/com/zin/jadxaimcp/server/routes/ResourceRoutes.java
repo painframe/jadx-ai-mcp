@@ -1,5 +1,7 @@
 package com.zin.jadxaimcp.server.routes;
 
+import com.zin.jadxaimcp.utils.ResponseContinuations;
+
 import io.javalin.http.Context;
 
 import jadx.api.JavaClass;
@@ -211,6 +213,8 @@ public class ResourceRoutes {
                 return;
             }
 
+            if (ResponseContinuations.send(ctx, mainWindow, "resource:" + matchedFileName, matchedContent,
+                    Map.of("file_name", matchedFileName, "type", "resource/text"))) return;
             Map<String, String> file = new HashMap<>();
             file.put("file_name", matchedFileName);
             file.put("content", matchedContent);

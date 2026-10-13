@@ -215,3 +215,5 @@ optionally filtered by `method_signature`, including descriptors and Frida types
 `GET /search-native-methods?package=...&offset=0&limit=100` lists native method metadata, sorted by class/method signature. Package filtering matches full segments.
 
 Method signatures also accept `method(int, String):void` or `(int, String):void`; parameter counts and types must match. Descriptor signatures remain supported. Class resolution accepts original/raw or renamed full names. Method lookup misses return at most50 `candidates`; an omitted signature retains existing first-match behavior.
+
+Class source, smali and text-resource endpoints accept `max_bytes` (1..1048576) and `cursor`. Opt-in replies contain `content` and `continuation` (`next_cursor`, `generation`, `offset_bytes`, `total_bytes`, `max_bytes`). Chunks preserve UTF-8 characters; too-small budgets and changed-content/project cursors return400. Default responses are unchanged; binary resources remain unsupported for text continuation.

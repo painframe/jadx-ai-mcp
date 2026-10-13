@@ -17,3 +17,5 @@ Tests use disposable APK/JAR fixtures, never a user project. Donor binaries and 
 | 08 Native method search | feat/native-method-search | xjoker@30337f6f072aa360e9099c99e99fb330d44e8986 | package boundaries/native-only test; Maven package | Python feat/native-method-search |
 
 | 09 Human method signatures | feat/human-method-signatures | ngkz@e8d11033a6751f0174ad7b4b00a886d9d3df972d + MrWeigx@c1e4e4e2a8 | real overload matching/descriptor tests; Maven package | Python feat/human-method-signatures |
+
+| 10 Response continuations | feat/response-continuations | xjoker@30337f6f072aa360e9099c99e99fb330d44e8986; mugiwarix limit intent | UTF-8 roundtrip/stale generation/source tests; Maven package | Python feat/response-continuations |

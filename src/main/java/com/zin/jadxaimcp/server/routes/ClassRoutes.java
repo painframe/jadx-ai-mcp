@@ -1,5 +1,7 @@
 package com.zin.jadxaimcp.server.routes;
 
+import com.zin.jadxaimcp.utils.ResponseContinuations;
+
 import com.zin.jadxaimcp.utils.SearchPattern;
 
 import io.javalin.http.Context;
@@ -211,6 +213,7 @@ public class ClassRoutes {
                         code = cls.getCode();
                         decompilationCache.put(className, code);
                     }
+                    if (ResponseContinuations.send(ctx, mainWindow, "class:" + className, code)) return;
                     ctx.result(code);
                     return;
                 }
@@ -329,7 +332,9 @@ public class ClassRoutes {
             JadxWrapper wrapper = mainWindow.getWrapper();
             for (JavaClass cls : wrapper.getIncludedClassesWithInners()) {
                 if ((cls.getFullName().equals(className) || cls.getRawName().equals(className))) {
-                    ctx.result(cls.getSmali());
+                    String smali = cls.getSmali();
+                    if (ResponseContinuations.send(ctx, mainWindow, "smali:" + className, smali)) return;
+                    ctx.result(smali);
                     return;
                 }
             }
