@@ -25,8 +25,12 @@ public class JadxAIMCPPluginError {
      */
     public static void handleError(Context ctx, String error_response, Exception e, Logger logger) {
         logger.error("JADX AI MCP Error: " + error_response, e);
-        int status = e instanceof PaginationUtils.PaginationException ? 400 : 500;
-        ctx.status(status).json(response(status, error_response));
+        int status = e instanceof MethodSignatures.AmbiguousSignatureException ? 409
+                : e instanceof PaginationUtils.PaginationException ? 400 : 500;
+        Map<String, Object> result = new HashMap<>(response(status, error_response));
+        if (e instanceof MethodSignatures.AmbiguousSignatureException)
+            result.put("candidates", ((MethodSignatures.AmbiguousSignatureException) e).candidates);
+        ctx.status(status).json(result);
     }
 
     /**

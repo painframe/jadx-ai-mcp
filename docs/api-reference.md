@@ -213,3 +213,5 @@ The Java runtime must permit launching its own `bin/java` executable.
 optionally filtered by `method_signature`, including descriptors and Frida types.
 
 `GET /search-native-methods?package=...&offset=0&limit=100` lists native method metadata, sorted by class/method signature. Package filtering matches full segments.
+
+Method signatures also accept `method(int, String):void` or `(int, String):void`; parameter counts and types must match. Descriptor signatures remain supported. Class resolution accepts original/raw or renamed full names. Method lookup misses return at most50 `candidates`; an omitted signature retains existing first-match behavior.

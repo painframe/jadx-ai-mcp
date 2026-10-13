@@ -254,7 +254,7 @@ public class XrefsRoutes {
     private JavaClass findClassByName(Context ctx, String className) {
         JadxWrapper wrapper = mainWindow.getWrapper();
         for (JavaClass cls : wrapper.getIncludedClassesWithInners()) {
-            if (cls.getFullName().equals(className)) return cls;
+            if ((cls.getFullName().equals(className) || cls.getRawName().equals(className))) return cls;
         }
         JadxAIMCPPluginError.handleError(ctx, 404, "Class " + className + " not found.", logger);
         return null;

@@ -55,7 +55,7 @@ public class RefactoringRoutes {
         try {
             JadxWrapper wrapper = mainWindow.getWrapper();
             for (JavaClass cls : wrapper.getIncludedClassesWithInners()) {
-                if (cls.getFullName().equals(className)) {
+                if ((cls.getFullName().equals(className) || cls.getRawName().equals(className))) {
                     ICodeNodeRef nodeRef = cls.getCodeNodeRef();
                     NodeRenamedByUser event = new NodeRenamedByUser(nodeRef, cls.getName(), newName);
                     event.setRenameNode(cls.getClassNode());
@@ -106,10 +106,11 @@ public class RefactoringRoutes {
 
         try {
             JadxWrapper wrapper = mainWindow.getWrapper();
+            MethodSignatures.ensureUnambiguous(wrapper.getIncludedClassesWithInners(), className, methodName, methodSignature);
             if (className != null && !className.isEmpty()) {
                 JavaClass targetClass = null;
                 for (JavaClass cls : wrapper.getIncludedClassesWithInners()) {
-                    if (cls.getFullName().equals(className)) {
+                    if ((cls.getFullName().equals(className) || cls.getRawName().equals(className))) {
                         targetClass = cls;
                         break;
                     }
@@ -196,7 +197,7 @@ public class RefactoringRoutes {
         try {
             JadxWrapper wrapper = mainWindow.getWrapper();
             for (JavaClass cls : wrapper.getIncludedClassesWithInners()) {
-                if (cls.getFullName().equals(className)) {
+                if ((cls.getFullName().equals(className) || cls.getRawName().equals(className))) {
                     for (JavaField field : cls.getFields()) {
                         if (field.getName().equals(oldFieldName)) {
                             ICodeNodeRef nodeRef = field.getCodeNodeRef();
@@ -254,7 +255,7 @@ public class RefactoringRoutes {
             JadxWrapper wrapper = mainWindow.getWrapper();
 
             for (JavaClass cls : wrapper.getIncludedClassesWithInners()) {
-                if (cls.getFullName().equals(className)) {
+                if ((cls.getFullName().equals(className) || cls.getRawName().equals(className))) {
                     for (JavaMethod method : cls.getMethods()) {
                         String fullMethodName = cls.getFullName() + "." + method.getName();
                         if (method.getName().equals(methodName) || fullMethodName.equalsIgnoreCase(methodName)) {

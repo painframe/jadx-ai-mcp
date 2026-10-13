@@ -205,7 +205,7 @@ public class ClassRoutes {
         try {
             JadxWrapper wrapper = mainWindow.getWrapper();
             for (JavaClass cls : wrapper.getIncludedClassesWithInners()) {
-                if (cls.getFullName().equals(className)) {
+                if ((cls.getFullName().equals(className) || cls.getRawName().equals(className))) {
                     String code = decompilationCache.get(className);
                     if (code == null) {
                         code = cls.getCode();
@@ -251,7 +251,7 @@ public class ClassRoutes {
         try {
             JadxWrapper wrapper = mainWindow.getWrapper();
             for (JavaClass cls : wrapper.getIncludedClassesWithInners()) {
-                if (cls.getFullName().equals(className)) {
+                if ((cls.getFullName().equals(className) || cls.getRawName().equals(className))) {
                     List<String> methods = new ArrayList<>();
                     for (JavaMethod method : cls.getMethods()) {
                         String fullMethodName = cls.getFullName() + "." + method.getName();
@@ -293,7 +293,7 @@ public class ClassRoutes {
         try {
             JadxWrapper wrapper = mainWindow.getWrapper();
             for (JavaClass cls : wrapper.getIncludedClassesWithInners()) {
-                if (cls.getFullName().equals(className)) {
+                if ((cls.getFullName().equals(className) || cls.getRawName().equals(className))) {
                     List<String> fields = new ArrayList<>();
                     for (JavaField field : cls.getFields()) {
                         String fieldData = field.getAccessFlags() +
@@ -328,7 +328,7 @@ public class ClassRoutes {
         try {
             JadxWrapper wrapper = mainWindow.getWrapper();
             for (JavaClass cls : wrapper.getIncludedClassesWithInners()) {
-                if (cls.getFullName().equals(className)) {
+                if ((cls.getFullName().equals(className) || cls.getRawName().equals(className))) {
                     ctx.result(cls.getSmali());
                     return;
                 }
