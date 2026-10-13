@@ -171,6 +171,7 @@ public class PluginServer {
         app.get("/health", generalRoutes::handleHealth);
         app.get("/class-info", analysisRoutes::classInfo);
         app.get("/method-signature", analysisRoutes::methodSignature);
+        app.get("/search-native-methods", analysisRoutes::nativeMethods);
 
         // --- Class & Code Navigation ---
         app.get("/current-class", classRoutes::handleCurrentClass);
