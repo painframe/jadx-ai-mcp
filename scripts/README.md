@@ -1,6 +1,6 @@
 # Reproducible Java checks
 
-Requires Docker, curl and unzip. The Maven/JDK17 image is pinned by digest in
+Requires Docker, curl, unzip and sha256sum (GNU coreutils). The Maven/JDK17 image is pinned by digest in
 `test-java.sh`; Java output retains the project's source/target level 11.
 Bootstrap a writable external cache once (example from repository root):
 
