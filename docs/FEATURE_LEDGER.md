@@ -27,3 +27,9 @@ Tests use disposable APK/JAR fixtures, never a user project. Donor binaries and 
 | 13 APK loading | feat/apk-loading | hnhcsl@50781c0987f008703ee0f0c735b8e3efb611b5cd | unsaved-project replacement denial,actual load callback contract; Maven package | Python feat/apk-loading |
 
 | 14 Search coalescing | feat/search-coalescing | xjoker@30337f6f072aa360e9099c99e99fb330d44e8986 | identical concurrent work executes once; generation key separation; Maven package | Python feat/search-coalescing |
+
+## 15 — bounded request scheduling
+
+Selective architecture port from DongShuaike (`7923a331690b8ac0f4e8f392af9b8f6ff4be3365`). Each server admits 4 heavy reads, 8 metadata reads and 1 search; pending admission is bounded to 64 with a 5 second deadline. Fair project read/write exclusion drains reads before rename/comment/cache/project mutations. The project-loading guard is checked again after admission and survives the asynchronous GUI load. Health, operation status and progress bypass analysis queues. Handler-scoped leases release on all exceptions; shutdown stops admission. No detached executors are introduced. Tests cover exclusion, independent metadata, saturation, actual HTTP loading/control behavior and error cleanup. GUI decompilation already running is cooperative and can delay a write; no hard deadline for JADX internals is claimed.
+
+15 review correction: baseline rename events dispatch asynchronously twice. HTTP renames now invoke the same supported JRenameNode code-rename builder, store sorted project renames, reload code data and unload cached source synchronously while holding the write lease. Visible editor buffers and package tree refresh synchronously on the EDT before the mutation lease ends. GUI-initiated edits remain controlled by JADX and are not claimed to take the HTTP admission lock.

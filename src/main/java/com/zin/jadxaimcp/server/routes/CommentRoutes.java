@@ -727,8 +727,8 @@ public class CommentRoutes {
             logger.warn("Failed to unload class after comment change: " + e.getMessage());
         }
 
-        // Repainting the open tab is cosmetic, so it can happen on the EDT in its own time
-        UiUtils.uiRun(() -> {
+        // refreshClass also reloads source; complete it while the mutation lease is held.
+        UiUtils.uiRunAndWait(() -> {
             try {
                 for (ContentPanel tab : mainWindow.getTabbedPane().getTabs()) {
                     if (!(tab instanceof ClassCodeContentPanel)) {

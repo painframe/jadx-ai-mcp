@@ -16,6 +16,8 @@ public class PluginServer {
     private final MainWindow mainWindow;
     private final int port;
     private Javalin app;
+    private final RequestScheduler scheduler = new RequestScheduler();
+    private ProjectRoutes projectRoutes;
     private final PaginationUtils paginationUtils;
     private volatile boolean isRunning = false;
 
@@ -74,6 +76,7 @@ public class PluginServer {
     public void stop() {
         if (app != null) {
             try {
+                scheduler.stopAdmission();
                 app.stop();
                 System.getProperties().remove(JVM_SERVER_KEY);
                 logger.info("JADX-AI-MCP Plugin: HTTP Server Stopped");
@@ -151,21 +154,23 @@ public class PluginServer {
         return port;
     }
 
+    public RequestScheduler scheduler() { return scheduler; }
+    private void get(String path, io.javalin.http.Handler handler) {
+        app.get(path, ctx -> scheduler.handle(ctx, handler, projectRoutes::isLoading));
+    }
+    private void post(String path, io.javalin.http.Handler handler) {
+        app.post(path, ctx -> scheduler.handle(ctx, handler, projectRoutes::isLoading));
+    }
+
     /**
      * Registers all HTTP API endpoints with their route handlers.
      */
     private void registerRoutes() {
         // Instantiate Route Controllers
         // Passing 'mainWindow' and 'paginationUtils' to them so they can do their work
-        ProjectRoutes projectRoutes = new ProjectRoutes(mainWindow);
-        app.before(ctx -> {
-            if (projectRoutes.isLoading() && !java.util.Set.of("/health", "/project-operation", "/open-apk", "/runtime-diagnostics").contains(ctx.path())) {
-                ctx.status(503).json(com.zin.jadxaimcp.utils.JadxAIMCPPluginError.response(503, "Project loading; retry after it is ready"));
-                ctx.skipRemainingHandlers();
-            }
-        });
-        app.post("/open-apk", projectRoutes::open);
-        app.get("/project-operation", projectRoutes::status);
+        projectRoutes = new ProjectRoutes(mainWindow);
+        post("/open-apk", projectRoutes::open);
+        get("/project-operation", projectRoutes::status);
         AnalysisRoutes analysisRoutes = new AnalysisRoutes(mainWindow, paginationUtils);
         GeneralRoutes generalRoutes = new GeneralRoutes(mainWindow, port, this);
         ClassRoutes classRoutes = new ClassRoutes(mainWindow, paginationUtils);
@@ -182,61 +187,61 @@ public class PluginServer {
                 "xrefs-to-class", xrefsRoutes::handleXrefsToClass,
                 "xrefs-to-method", xrefsRoutes::handleXrefsToMethod,
                 "xrefs-to-field", xrefsRoutes::handleXrefsToField), mainWindow);
-        app.post("/batch-analysis", batchRoutes::handle);
+        post("/batch-analysis", batchRoutes::handle);
 
         // --- General & Health ---
-        app.get("/health", generalRoutes::handleHealth);
-        app.get("/class-info", analysisRoutes::classInfo);
-        app.get("/method-signature", analysisRoutes::methodSignature);
-        app.get("/search-native-methods", analysisRoutes::nativeMethods);
+        get("/health", generalRoutes::handleHealth);
+        get("/class-info", analysisRoutes::classInfo);
+        get("/method-signature", analysisRoutes::methodSignature);
+        get("/search-native-methods", analysisRoutes::nativeMethods);
 
         // --- Class & Code Navigation ---
-        app.get("/current-class", classRoutes::handleCurrentClass);
-        app.get("/all-classes", classRoutes::handleAllClasses);
-        app.get("/selected-text", classRoutes::handleSelectedText);
-        app.get("/class-source", classRoutes::handleClassSource);
-        app.get("/smali-of-class", classRoutes::handleSmaliOfClass);
-        app.get("/methods-of-class", classRoutes::handleMethodsOfClass);
-        app.get("/fields-of-class", classRoutes::handleFieldsOfClass);
-        app.get("/main-application-classes-code", classRoutes::handleMainApplicationClassesCode);
-        app.get("/main-application-classes-names", classRoutes::handleMainApplicationClassesNames);
-        app.get("/main-activity", classRoutes::handleMainActivity);
-        app.get("/search-classes-by-keyword", classRoutes::handleSearchClassesByKeyword);
-        app.get("/search-progress", classRoutes::handleSearchProgress);
-        app.get("/package-tree", classRoutes::handleGetPackageTree);
-        app.get("/cache-stats", classRoutes::handleCacheStats);
-        app.post("/cache-clear", classRoutes::handleCacheClear);
+        get("/current-class", classRoutes::handleCurrentClass);
+        get("/all-classes", classRoutes::handleAllClasses);
+        get("/selected-text", classRoutes::handleSelectedText);
+        get("/class-source", classRoutes::handleClassSource);
+        get("/smali-of-class", classRoutes::handleSmaliOfClass);
+        get("/methods-of-class", classRoutes::handleMethodsOfClass);
+        get("/fields-of-class", classRoutes::handleFieldsOfClass);
+        get("/main-application-classes-code", classRoutes::handleMainApplicationClassesCode);
+        get("/main-application-classes-names", classRoutes::handleMainApplicationClassesNames);
+        get("/main-activity", classRoutes::handleMainActivity);
+        get("/search-classes-by-keyword", classRoutes::handleSearchClassesByKeyword);
+        get("/search-progress", classRoutes::handleSearchProgress);
+        get("/package-tree", classRoutes::handleGetPackageTree);
+        get("/cache-stats", classRoutes::handleCacheStats);
+        post("/cache-clear", classRoutes::handleCacheClear);
 
         // --- Methods ---
-        app.get("/method-by-name", methodRoutes::handleMethodByName);
-        app.get("/search-method", methodRoutes::handleSearchMethod);
+        get("/method-by-name", methodRoutes::handleMethodByName);
+        get("/search-method", methodRoutes::handleSearchMethod);
 
         // --- Xrefs ---
-        app.get("/xrefs-to-class", xrefsRoutes::handleXrefsToClass);
-        app.get("/xrefs-to-method", xrefsRoutes::handleXrefsToMethod);
-        app.get("/xrefs-to-field", xrefsRoutes::handleXrefsToField);
+        get("/xrefs-to-class", xrefsRoutes::handleXrefsToClass);
+        get("/xrefs-to-method", xrefsRoutes::handleXrefsToMethod);
+        get("/xrefs-to-field", xrefsRoutes::handleXrefsToField);
 
         // --- Resources & Manifest ---
-        app.get("/manifest", resourceRoutes::handleManifest);
-        app.get("/strings", resourceRoutes::handleStrings);
-        app.get("/list-all-resource-files-names", resourceRoutes::handleListAllResourceFilesNames);
-        app.get("/get-resource-file", resourceRoutes::handleGetResourceFile);
+        get("/manifest", resourceRoutes::handleManifest);
+        get("/strings", resourceRoutes::handleStrings);
+        get("/list-all-resource-files-names", resourceRoutes::handleListAllResourceFilesNames);
+        get("/get-resource-file", resourceRoutes::handleGetResourceFile);
 
         // --- Renaming ---
-        app.get("/rename-class", refactoringRoutes::handleRenameClass);
-        app.get("/rename-method", refactoringRoutes::handleRenameMethod);
-        app.get("/rename-field", refactoringRoutes::handleRenameField);
-        app.get("/rename-package", refactoringRoutes::handleRenamePackage);
-        app.get("/rename-variable", refactoringRoutes::handleRenameVariable);
+        get("/rename-class", refactoringRoutes::handleRenameClass);
+        get("/rename-method", refactoringRoutes::handleRenameMethod);
+        get("/rename-field", refactoringRoutes::handleRenameField);
+        get("/rename-package", refactoringRoutes::handleRenamePackage);
+        get("/rename-variable", refactoringRoutes::handleRenameVariable);
 
         // --- Comments ---
-        app.get("/add-comment", commentRoutes::handleAddComment);
-        app.get("/list-comments", commentRoutes::handleListComments);
+        get("/add-comment", commentRoutes::handleAddComment);
+        get("/list-comments", commentRoutes::handleListComments);
 
         // --- Debugging ---
-        app.get("/debug/stack-frames", debugRoutes::handleGetStackFrames);
-        app.get("/debug/variables", debugRoutes::handleGetVariables);
-        app.get("/debug/threads", debugRoutes::handleGetThreads);
+        get("/debug/stack-frames", debugRoutes::handleGetStackFrames);
+        get("/debug/variables", debugRoutes::handleGetVariables);
+        get("/debug/threads", debugRoutes::handleGetThreads);
     }
 
 }
