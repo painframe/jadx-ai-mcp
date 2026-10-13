@@ -1,5 +1,7 @@
 package com.zin.jadxaimcp.server.routes;
 
+import com.zin.jadxaimcp.utils.SearchPattern;
+
 import io.javalin.http.Context;
 
 import jadx.api.JavaClass;
@@ -612,6 +614,7 @@ public class ClassRoutes {
         Set<SearchLocation> searchLocations = parseSearchLocations(ctx.queryParam("search_in"));
 
         String searchId = null;
+        SearchPattern term = null;
         try {
             JadxWrapper wrapper = mainWindow.getWrapper();
             if (wrapper == null) {
@@ -619,7 +622,8 @@ public class ClassRoutes {
                 return;
             }
             List<JavaClass> allClasses = wrapper.getIncludedClassesWithInners();
-            String term = searchTerm.toLowerCase();
+            term = new SearchPattern(searchTerm, SearchPattern.flag(ctx.queryParam("regex")),
+                    SearchPattern.flag(ctx.queryParam("case_sensitive")));
 
             // Start progress tracking
             String locationsDesc = searchLocations.stream()
@@ -661,7 +665,12 @@ public class ClassRoutes {
                     "class-list",
                     "classes",
                     JavaClass::getFullName);
+            result.put("search_options", Map.of("regex", SearchPattern.flag(ctx.queryParam("regex")),
+                    "case_sensitive", SearchPattern.flag(ctx.queryParam("case_sensitive"))));
             ctx.json(result);
+        } catch (IllegalArgumentException e) {
+            if (searchId != null) progressTracker.failSearch(searchId, e.getMessage());
+            JadxAIMCPPluginError.handleError(ctx, 400, e.getMessage(), logger);
         } catch (PaginationException e) {
             if (searchId != null) {
                 progressTracker.failSearch(searchId, e.getMessage());
@@ -678,6 +687,8 @@ public class ClassRoutes {
                     "Internal error occurred while trying to handle the search classes by keyword mcp request: "
                             + e.getMessage(),
                     e, logger);
+        } finally {
+            if (term != null) term.close();
         }
     }
 
@@ -772,7 +783,7 @@ public class ClassRoutes {
      * @return Set of matching JavaClasses
      */
     private Set<JavaClass> searchInLocation(List<JavaClass> allClasses,
-            String term, SearchLocation location,
+            SearchPattern term, SearchLocation location,
             String packageFilter, boolean applyPackageFilter) {
         switch (location) {
             case CLASS_NAME:
@@ -793,7 +804,7 @@ public class ClassRoutes {
     /**
      * Search classes by class name containing the keyword.
      */
-    private Set<JavaClass> searchByClassName(List<JavaClass> allClasses, String term,
+    private Set<JavaClass> searchByClassName(List<JavaClass> allClasses, SearchPattern term,
             String packageFilter, boolean applyPackageFilter) {
         return allClasses.parallelStream()
                 .filter(cls -> {
@@ -803,8 +814,8 @@ public class ClassRoutes {
                         return false;
                     }
                     // Check if class name contains the term
-                    String className = cls.getName().toLowerCase();
-                    boolean matched = className.contains(term);
+                    String className = cls.getName();
+                    boolean matched = term.matches(className);
                     if (matched) progressTracker.incrementMatches();
                     return matched;
                 })
@@ -819,7 +830,7 @@ public class ClassRoutes {
      * - Constructor names (methods named <init> or <clinit>)
      * - Method parameter types
      */
-    private Set<JavaClass> searchByMethodName(List<JavaClass> allClasses, String term,
+    private Set<JavaClass> searchByMethodName(List<JavaClass> allClasses, SearchPattern term,
             String packageFilter, boolean applyPackageFilter) {
         return allClasses.parallelStream()
                 .filter(cls -> {
@@ -832,15 +843,15 @@ public class ClassRoutes {
                     for (JavaMethod method : cls.getMethods()) {
                         // Check method name (includes constructors <init> and static initializers
                         // <clinit>)
-                        if (method.getName().toLowerCase().contains(term)) {
+                        if (term.matches(method.getName())) {
                             progressTracker.incrementMatches();
                             return true;
                         }
 
                         // Check if it's a constructor - also match against class simple name
                         if (method.isConstructor()) {
-                            String classSimpleName = cls.getName().toLowerCase();
-                            if (classSimpleName.contains(term)) {
+                            String classSimpleName = cls.getName();
+                            if (term.matches(classSimpleName)) {
                                 progressTracker.incrementMatches();
                                 return true;
                             }
@@ -854,7 +865,7 @@ public class ClassRoutes {
     /**
      * Search classes by field name containing the keyword.
      */
-    private Set<JavaClass> searchByFieldName(List<JavaClass> allClasses, String term,
+    private Set<JavaClass> searchByFieldName(List<JavaClass> allClasses, SearchPattern term,
             String packageFilter, boolean applyPackageFilter) {
         return allClasses.parallelStream()
                 .filter(cls -> {
@@ -865,7 +876,7 @@ public class ClassRoutes {
                     }
                     // Check if any field name contains the term
                     for (JavaField field : cls.getFields()) {
-                        if (field.getName().toLowerCase().contains(term)) {
+                        if (term.matches(field.getName())) {
                             progressTracker.incrementMatches();
                             return true;
                         }
@@ -878,7 +889,7 @@ public class ClassRoutes {
     /**
      * Search classes by code containing the keyword.
      */
-    private Set<JavaClass> searchByCode(List<JavaClass> allClasses, String term,
+    private Set<JavaClass> searchByCode(List<JavaClass> allClasses, SearchPattern term,
             String packageFilter, boolean applyPackageFilter) {
         return allClasses.parallelStream()
                 .filter(cls -> {
@@ -893,9 +904,11 @@ public class ClassRoutes {
                             code = cls.getCode();
                             decompilationCache.put(cls.getFullName(), code);
                         }
-                        boolean matched = code != null && code.toLowerCase().contains(term);
+                        boolean matched = term.matches(code);
                         if (matched) progressTracker.incrementMatches();
                         return matched;
+                    } catch (IllegalArgumentException e) {
+                        throw e;
                     } catch (Exception e) {
                         return false;
                     }
@@ -907,10 +920,10 @@ public class ClassRoutes {
      * Search classes by comments containing the keyword.
      * Comments include both single-line (//) and multi-line comments.
      */
-    private Set<JavaClass> searchByComment(List<JavaClass> allClasses, String term,
+    private Set<JavaClass> searchByComment(List<JavaClass> allClasses, SearchPattern term,
             String packageFilter, boolean applyPackageFilter) {
         // Pattern to match Java comments: // single line or /* multi line */
-        Pattern singleLineComment = Pattern.compile("//.*?" + Pattern.quote(term) + ".*", Pattern.CASE_INSENSITIVE);
+        Pattern singleLineComment = Pattern.compile("//[^\\r\\n]*");
         Pattern multiLineComment = Pattern.compile("/\\*[^*]*\\*+(?:[^/*][^*]*\\*+)*/", Pattern.DOTALL);
 
         return allClasses.parallelStream()
@@ -930,21 +943,26 @@ public class ClassRoutes {
                             return false;
 
                         // Search for keyword in single-line comments
-                        if (singleLineComment.matcher(code).find()) {
-                            progressTracker.incrementMatches();
-                            return true;
+                        java.util.regex.Matcher lineMatcher = singleLineComment.matcher(code);
+                        while (lineMatcher.find()) {
+                            if (term.matches(lineMatcher.group())) {
+                                progressTracker.incrementMatches();
+                                return true;
+                            }
                         }
 
                         // Search for keyword in multi-line comments
                         java.util.regex.Matcher matcher = multiLineComment.matcher(code);
                         while (matcher.find()) {
                             String comment = matcher.group();
-                            if (comment.toLowerCase().contains(term)) {
+                            if (term.matches(comment)) {
                                 progressTracker.incrementMatches();
                                 return true;
                             }
                         }
                         return false;
+                    } catch (IllegalArgumentException e) {
+                        throw e;
                     } catch (Exception e) {
                         return false;
                     }
