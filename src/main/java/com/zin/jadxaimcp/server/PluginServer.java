@@ -189,6 +189,8 @@ public class PluginServer {
                 "xrefs-to-field", xrefsRoutes::handleXrefsToField), mainWindow);
         post("/batch-analysis", batchRoutes::handle);
 
+        get("/jvm-info", new JvmRoutes(mainWindow)::handle);
+
         // --- General & Health ---
         get("/health", generalRoutes::handleHealth);
         get("/class-info", analysisRoutes::classInfo);
