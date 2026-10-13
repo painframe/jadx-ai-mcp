@@ -31,7 +31,7 @@ public final class SearchPattern implements AutoCloseable {
             throw new IllegalArgumentException("Search expression must contain 1..1024 characters");
         this.caseSensitive = caseSensitive;
         this.timeoutNanos = timeoutNanos;
-        literal = caseSensitive ? expression : expression.toLowerCase(Locale.ROOT);
+        literal = expression;
         if (!regex) return;
         if (!(permit = WORKERS.tryAcquire())) throw new IllegalArgumentException("Regex worker capacity exhausted");
         try {
@@ -46,7 +46,7 @@ public final class SearchPattern implements AutoCloseable {
             });
             exchange(() -> {
                 input.writeUTF(expression); input.writeBoolean(caseSensitive); input.flush();
-                checkReply(); return false;
+                checkReply(); return 0;
             }, TimeUnit.SECONDS.toNanos(5));
         } catch (Exception error) {
             close();
@@ -54,15 +54,24 @@ public final class SearchPattern implements AutoCloseable {
         }
     }
 
-    public synchronized boolean matches(String text) {
+    public boolean matches(String text) { return find(text, 0) >= 0; }
+
+    public synchronized int find(String text, int offset) {
         if (closed) throw new IllegalArgumentException("Regex request already closed");
-        if (text == null) return false;
-        if (io == null) return (caseSensitive ? text : text.toLowerCase(Locale.ROOT)).contains(literal);
+        if (text == null) return -1;
+        if (offset < 0 || offset > text.length()) throw new IllegalArgumentException("Invalid search offset");
+        if (io == null) {
+            if (caseSensitive) return text.indexOf(literal, offset);
+            for (int index = offset; index <= text.length() - literal.length(); index++) {
+                if (text.regionMatches(true, index, literal, 0, literal.length())) return index;
+            }
+            return -1;
+        }
         if (text.length() > MAX_INPUT_CHARS) throw new IllegalArgumentException("Regex input exceeds 4194304 characters");
         return exchange(() -> {
             byte[] bytes = text.getBytes(StandardCharsets.UTF_8);
-            input.writeInt(bytes.length); input.write(bytes); input.flush();
-            checkReply(); return output.readBoolean();
+            input.writeInt(bytes.length); input.write(bytes); input.writeInt(offset); input.flush();
+            checkReply(); return output.readInt();
         }, timeoutNanos);
     }
 
@@ -70,8 +79,8 @@ public final class SearchPattern implements AutoCloseable {
         if (!output.readBoolean()) throw new IOException(output.readUTF());
     }
 
-    private boolean exchange(Callable<Boolean> work, long deadlineNanos) {
-        Future<Boolean> result = io.submit(work);
+    private int exchange(Callable<Integer> work, long deadlineNanos) {
+        Future<Integer> result = io.submit(work);
         try {
             return result.get(deadlineNanos, TimeUnit.NANOSECONDS);
         } catch (InterruptedException error) {
@@ -116,8 +125,10 @@ public final class SearchPattern implements AutoCloseable {
                     try { size = input.readInt(); } catch (EOFException done) { return; }
                     if (size < 0 || size > MAX_INPUT_CHARS * 4) throw new IOException("Regex input too large");
                     byte[] bytes = new byte[size]; input.readFully(bytes);
-                    boolean matched = pattern.matcher(new String(bytes, StandardCharsets.UTF_8)).find();
-                    output.writeBoolean(true); output.writeBoolean(matched); output.flush();
+                    int offset = input.readInt();
+                    java.util.regex.Matcher matcher = pattern.matcher(new String(bytes, StandardCharsets.UTF_8));
+                    int index = matcher.find(offset) ? matcher.start() : -1;
+                    output.writeBoolean(true); output.writeInt(index); output.flush();
                 }
             } catch (Exception | StackOverflowError error) {
                 output.writeBoolean(false); output.writeUTF("Invalid or excessively complex regex"); output.flush();

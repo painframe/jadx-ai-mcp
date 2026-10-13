@@ -9,3 +9,5 @@ Tests use disposable APK/JAR fixtures, never a user project. Donor binaries and 
 | 03 Structured errors | feat/structured-error-contract | ai-repo-save/jadx-ai-mcp@6118c438dd22950b92d606891b7ad89c892c3698 | Maven package; error envelope and invalid pagination tests | painframe/jadx-mcp-server feat/structured-error-contract |
 
 | 05 Search patterns | feat/search-patterns | odell0111@951d6d964ae194a45bd4735bd8839d455d0607ba | case, escapes, invalid pattern and actual matcher timeout tests | Python feat/search-patterns |
+
+| 06 GUI search parity | feat/gui-search-parity | ai-repo-save@6118c438dd22950b92d606891b7ad89c892c3698 | Maven compile/test; safe regex offsets; provider exceptions propagate (no silent partial success) | Java-only |
