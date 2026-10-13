@@ -213,7 +213,7 @@ public class ClassRoutes {
                     return;
                 }
             }
-            ctx.status(404).json(Map.of("error", "Class " + className + " not found"));
+            ctx.status(404).json(JadxAIMCPPluginError.response(404, "Class " + className + " not found"));
         } catch (Exception e) {
             JadxAIMCPPluginError.handleError(ctx, "Internal error retrieving class source: " + e.getMessage(), e,
                     logger);

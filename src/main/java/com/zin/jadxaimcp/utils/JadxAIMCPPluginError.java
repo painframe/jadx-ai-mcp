@@ -25,7 +25,8 @@ public class JadxAIMCPPluginError {
      */
     public static void handleError(Context ctx, String error_response, Exception e, Logger logger) {
         logger.error("JADX AI MCP Error: " + error_response, e);
-        ctx.status(500).json(Map.of("error", error_response));
+        int status = e instanceof PaginationUtils.PaginationException ? 400 : 500;
+        ctx.status(status).json(response(status, error_response));
     }
 
     /**
@@ -45,6 +46,25 @@ public class JadxAIMCPPluginError {
     */
     public static void handleError(Context ctx, int status, String error_response, Logger logger) {
         logger.error("JADX AI MCP Error: " + error_response);
-        ctx.status(status).json(Map.of("error", error_response));
+        ctx.status(status).json(response(status, error_response));
+    }
+    public static Map<String, Object> response(int status, String message) {
+        String code;
+        switch (status) {
+            case 422:
+            case 400: code = "invalid_request"; break;
+            case 401: code = "unauthorized"; break;
+            case 403: code = "forbidden"; break;
+            case 404: code = "not_found"; break;
+            case 409: code = "conflict"; break;
+            case 413: code = "response_too_large"; break;
+            case 429: code = "busy"; break;
+            case 501: code = "unsupported_capability"; break;
+            case 503: code = "unavailable"; break;
+            case 504: code = "timeout"; break;
+            default: code = "internal_error";
+        }
+        return Map.of("error", message, "code", code, "retryable", status == 429 || status == 503 || status == 504,
+                "source", "jadx", "status", status);
     }
 }
