@@ -12,10 +12,16 @@ public final class ResponseContinuations {
         return send(ctx, window, identity, content, Map.of());
     }
     public static boolean send(Context ctx, MainWindow window, String identity, String content, Map<String, Object> metadata) {
+        return send(ctx, ProjectState.generation(window), identity, content, metadata);
+    }
+    public static boolean send(Context ctx, String generation, String identity, String content) {
+        return send(ctx, generation, identity, content, Map.of());
+    }
+    public static boolean send(Context ctx, String generation, String identity, String content, Map<String, Object> metadata) {
         if (ctx.queryParam("max_bytes") == null && ctx.queryParam("cursor") == null) return false;
         try {
             int maximum = ctx.queryParam("max_bytes") == null ? 65536 : Integer.parseInt(ctx.queryParam("max_bytes"));
-            Map<String, Object> result = new LinkedHashMap<>(chunk(content, identity, ProjectState.generation(window), maximum, ctx.queryParam("cursor")));
+            Map<String, Object> result = new LinkedHashMap<>(chunk(content, identity, generation, maximum, ctx.queryParam("cursor")));
             result.putAll(metadata);
             ctx.json(result);
         } catch (IllegalArgumentException error) {

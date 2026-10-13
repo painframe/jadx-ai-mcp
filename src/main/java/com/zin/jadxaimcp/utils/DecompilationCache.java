@@ -16,21 +16,25 @@ public class DecompilationCache {
     private static final int MAX_COMPRESSED_BYTES = 64 * 1024 * 1024;
     private static final int MAX_SOURCE_BYTES = 4 * 1024 * 1024;
     private static final Map<MainWindow, DecompilationCache> INSTANCES = new WeakHashMap<>();
-    private static final DecompilationCache INSTANCE = new DecompilationCache(null);
+    private static final DecompilationCache INSTANCE = new DecompilationCache((MainWindow) null);
     private final WeakReference<MainWindow> owner;
+    private java.util.function.Supplier<String> standaloneGeneration;
     private final LinkedHashMap<String, byte[]> cache = new LinkedHashMap<>(16, 0.75f, true);
     private final Map<String, Integer> sizes = new HashMap<>();
     private String generation = "";
     private long hits, misses, compressedBytes, originalBytes;
     private DecompilationCache(MainWindow window) { owner = new WeakReference<>(window); }
+    public DecompilationCache(java.util.function.Supplier<String> generation) {
+        owner = new WeakReference<>(null); standaloneGeneration = generation;
+    }
     public static DecompilationCache getInstance() { return INSTANCE; }
     public static synchronized DecompilationCache forWindow(MainWindow window) {
         return INSTANCES.computeIfAbsent(window, DecompilationCache::new);
     }
     private void refresh() {
         MainWindow window = owner.get();
-        if (window == null) return;
-        String current = ProjectState.generation(window);
+        if (window == null && standaloneGeneration == null) return;
+        String current = standaloneGeneration != null ? standaloneGeneration.get() : ProjectState.generation(window);
         if (!current.equals(generation)) { clear(); generation = current; }
     }
     public synchronized String generation() { refresh(); return generation; }

@@ -9,7 +9,7 @@ import io.javalin.http.Context;
 import jadx.api.JavaClass;
 import jadx.api.JavaField;
 import jadx.api.JavaMethod;
-import jadx.gui.JadxWrapper;
+import jadx.api.JadxDecompiler;
 import jadx.gui.ui.MainWindow;
 import jadx.api.ResourceFile;
 import jadx.api.security.IJadxSecurity;
@@ -49,6 +49,10 @@ import com.zin.jadxaimcp.utils.DecompilationCache;
 public class ClassRoutes {
     private static final Logger logger = LoggerFactory.getLogger(ClassRoutes.class);
     private final MainWindow mainWindow;
+    private final java.util.function.Supplier<JadxDecompiler> decompiler;
+    private final java.util.function.Supplier<List<JavaClass>> classes;
+    private final java.util.function.Supplier<String> generation;
+    private final Runnable invalidate;
     private final PaginationUtils paginationUtils;
     private final com.zin.jadxaimcp.utils.SearchCoordinator<Map<String, Object>> searches = new com.zin.jadxaimcp.utils.SearchCoordinator<>();
     private final SearchProgressTracker progressTracker;
@@ -86,9 +90,22 @@ public class ClassRoutes {
     public ClassRoutes(MainWindow mainWindow, PaginationUtils paginationUtils) {
         this.mainWindow = mainWindow;
         this.progressTracker = SearchProgressTracker.forWindow(mainWindow);
+        this.decompiler = () -> mainWindow.getWrapper().getDecompiler();
+        this.classes = () -> mainWindow.getWrapper().getIncludedClassesWithInners();
+        this.generation = () -> com.zin.jadxaimcp.utils.ProjectState.generation(mainWindow);
+        this.invalidate = () -> com.zin.jadxaimcp.utils.ProjectState.invalidate(mainWindow);
         this.decompilationCache = DecompilationCache.forWindow(mainWindow);
         this.paginationUtils = paginationUtils;
     }
+
+    public ClassRoutes(java.util.function.Supplier<JadxDecompiler> decompiler,
+            java.util.function.Supplier<String> generation, Runnable invalidate, PaginationUtils pagination, SearchProgressTracker progress) {
+        this.mainWindow = null; this.decompiler = decompiler; this.progressTracker = progress;
+        this.classes = () -> decompiler.get().getClassesWithInners();
+        this.generation = generation; this.invalidate = invalidate;
+        this.decompilationCache = new DecompilationCache(generation); this.paginationUtils = pagination;
+    }
+    public Map<String, Object> cacheStats() { return decompilationCache.getStats(); }
 
     // ------------------------------- Request Handlers --------------------------
 
@@ -137,8 +154,8 @@ public class ClassRoutes {
      */
     public void handleAllClasses(Context ctx) {
         try {
-            JadxWrapper wrapper = mainWindow.getWrapper();
-            List<JavaClass> classes = wrapper.getIncludedClassesWithInners();
+            JadxDecompiler wrapper = decompiler.get();
+            List<JavaClass> classes = this.classes.get();
 
             Map<String, Object> result = paginationUtils.handlePagination(
                     ctx,
@@ -209,15 +226,15 @@ public class ClassRoutes {
 
         try {
             String sourceGeneration = decompilationCache.generation();
-            JadxWrapper wrapper = mainWindow.getWrapper();
-            for (JavaClass cls : wrapper.getIncludedClassesWithInners()) {
+            JadxDecompiler wrapper = decompiler.get();
+            for (JavaClass cls : classes.get()) {
                 if ((cls.getFullName().equals(className) || cls.getRawName().equals(className))) {
                     String code = decompilationCache.get(className);
                     if (code == null) {
                         code = cls.getCode();
                         decompilationCache.put(className, code, sourceGeneration);
                     }
-                    if (ResponseContinuations.send(ctx, mainWindow, "class:" + className, code)) return;
+                    if (ResponseContinuations.send(ctx, generation.get(), "class:" + className, code)) return;
                     ctx.result(code);
                     return;
                 }
@@ -256,8 +273,8 @@ public class ClassRoutes {
         // className = className.replace('$', '.');
 
         try {
-            JadxWrapper wrapper = mainWindow.getWrapper();
-            for (JavaClass cls : wrapper.getIncludedClassesWithInners()) {
+            JadxDecompiler wrapper = decompiler.get();
+            for (JavaClass cls : classes.get()) {
                 if ((cls.getFullName().equals(className) || cls.getRawName().equals(className))) {
                     List<String> methods = new ArrayList<>();
                     for (JavaMethod method : cls.getMethods()) {
@@ -298,8 +315,8 @@ public class ClassRoutes {
             return;
 
         try {
-            JadxWrapper wrapper = mainWindow.getWrapper();
-            for (JavaClass cls : wrapper.getIncludedClassesWithInners()) {
+            JadxDecompiler wrapper = decompiler.get();
+            for (JavaClass cls : classes.get()) {
                 if ((cls.getFullName().equals(className) || cls.getRawName().equals(className))) {
                     List<String> fields = new ArrayList<>();
                     for (JavaField field : cls.getFields()) {
@@ -333,11 +350,11 @@ public class ClassRoutes {
             return;
 
         try {
-            JadxWrapper wrapper = mainWindow.getWrapper();
-            for (JavaClass cls : wrapper.getIncludedClassesWithInners()) {
+            JadxDecompiler wrapper = decompiler.get();
+            for (JavaClass cls : classes.get()) {
                 if ((cls.getFullName().equals(className) || cls.getRawName().equals(className))) {
                     String smali = cls.getSmali();
-                    if (ResponseContinuations.send(ctx, mainWindow, "smali:" + className, smali)) return;
+                    if (ResponseContinuations.send(ctx, generation.get(), "smali:" + className, smali)) return;
                     ctx.result(smali);
                     return;
                 }
@@ -362,8 +379,8 @@ public class ClassRoutes {
     public void handleMainActivity(Context ctx) {
         try {
             String sourceGeneration = decompilationCache.generation();
-            JadxWrapper wrapper = mainWindow.getWrapper();
-            ResourceFile manifestRes = AndroidManifestParser.getAndroidManifest(mainWindow.getWrapper().getResources());
+            JadxDecompiler wrapper = decompiler.get();
+            ResourceFile manifestRes = AndroidManifestParser.getAndroidManifest(decompiler.get().getResources());
             if (manifestRes == null) {
                 JadxAIMCPPluginError.handleError(ctx, 404, "AndroidManifest.xml not found", logger);
                 return;
@@ -385,7 +402,7 @@ public class ClassRoutes {
                 return;
             }
 
-            JavaClass mainActivityClass = results.getMainActivityJavaClass(wrapper.getDecompiler());
+            JavaClass mainActivityClass = results.getMainActivityJavaClass(wrapper);
             if (mainActivityClass == null) {
                 JadxAIMCPPluginError.handleError(ctx, 404, "Failed to get activity class: " + results.getApplication(),
                         logger);
@@ -419,7 +436,7 @@ public class ClassRoutes {
      */
     public void handleMainApplicationClassesNames(Context ctx) {
         try {
-            JadxWrapper wrapper = mainWindow.getWrapper();
+            JadxDecompiler wrapper = decompiler.get();
             List<ResourceFile> resources = wrapper.getResources();
 
             // get the manifest resource file
@@ -445,7 +462,7 @@ public class ClassRoutes {
             }
 
             // Changed the getClasses() to getClassesWithInners()
-            List<JavaClass> matchedClasses = wrapper.getDecompiler()
+            List<JavaClass> matchedClasses = wrapper
                     .getClassesWithInners()
                     .stream()
                     .filter(cls -> cls.getFullName().startsWith(packageName))
@@ -493,7 +510,7 @@ public class ClassRoutes {
     public void handleMainApplicationClassesCode(Context ctx) {
         try {
             String sourceGeneration = decompilationCache.generation();
-            JadxWrapper wrapper = mainWindow.getWrapper();
+            JadxDecompiler wrapper = decompiler.get();
             List<ResourceFile> resources = wrapper.getResources();
 
             // get the manifest resource file
@@ -521,7 +538,7 @@ public class ClassRoutes {
             logger.info("JADX AI MCP: Package name: " + packageName);
             // filter classes under this package
             // Changed the getClasses() to getClassesWithInners()
-            List<JavaClass> matchedClasses = wrapper.getDecompiler()
+            List<JavaClass> matchedClasses = wrapper
                     .getClassesWithInners()
                     .stream()
                     .filter(cls -> cls.getFullName().startsWith(packageName))
@@ -625,20 +642,26 @@ public class ClassRoutes {
             Set<String> keys = locations.stream().map(location -> location == SearchLocation.CODE ? "code"
                     : location == SearchLocation.COMMENT ? "comment" : location.name().toLowerCase(java.util.Locale.ROOT).replace("_name", ""))
                     .collect(Collectors.toCollection(java.util.TreeSet::new));
-            String generation = com.zin.jadxaimcp.utils.ProjectState.generation(mainWindow);
+            if (mainWindow == null && keys.contains("comment")) {
+                ctx.status(501).json(JadxAIMCPPluginError.response(501, "Comment search requires a GUI project")); return;
+            }
+            String generation = this.generation.get();
             String key = new com.google.gson.Gson().toJson(java.util.Arrays.asList(generation, searchTerm, packageFilter, excluded, regex, sensitive, timeout, keys));
             Map<String, Object> found = searches.get(key, () -> {
-                List<JavaClass> classes = mainWindow.getWrapper().getIncludedClassesWithInners().stream()
+                List<JavaClass> classes = this.classes.get().stream()
                         .filter(cls -> java.util.Arrays.stream(excluded.split(",")).map(String::trim).filter(value -> !value.isEmpty())
                                 .noneMatch(value -> cls.getPackage().equals(value) || cls.getPackage().startsWith(value + ".")))
                         .collect(Collectors.toList());
                 String id = progressTracker.startSearch(String.join(",", keys), classes.size() * keys.size());
                 List<String> warnings = new ArrayList<>();
                 try (SearchPattern pattern = new SearchPattern(searchTerm, regex, sensitive)) {
-                    List<JavaClass> matches = new ArrayList<>(com.zin.jadxaimcp.server.search.GuiAlignedSearch.collectMatchingClasses(
-                            mainWindow, classes, searchTerm, pattern, packageFilter, isValidPackageFilter(packageFilter), keys,
-                            System.nanoTime() + java.util.concurrent.TimeUnit.MILLISECONDS.toNanos(timeout), warnings));
-                    if (!generation.equals(com.zin.jadxaimcp.utils.ProjectState.generation(mainWindow)))
+                    List<JavaClass> matches = new ArrayList<>(mainWindow == null
+                            ? com.zin.jadxaimcp.headless.ApiSearch.collect(classes, pattern, packageFilter, keys,
+                                System.nanoTime() + java.util.concurrent.TimeUnit.MILLISECONDS.toNanos(timeout), warnings, progressTracker)
+                            : com.zin.jadxaimcp.server.search.GuiAlignedSearch.collectMatchingClasses(
+                                mainWindow, classes, searchTerm, pattern, packageFilter, isValidPackageFilter(packageFilter), keys,
+                                System.nanoTime() + java.util.concurrent.TimeUnit.MILLISECONDS.toNanos(timeout), warnings));
+                    if (!generation.equals(this.generation.get()))
                         throw new IllegalArgumentException("Project changed during search; retry");
                     progressTracker.completeSearch(id, matches.size());
                     return Map.of("classes", List.copyOf(matches), "search_id", id, "partial", !warnings.isEmpty(),
@@ -757,8 +780,8 @@ public class ClassRoutes {
      */
     public void handleGetPackageTree(Context ctx) {
         try {
-            JadxWrapper wrapper = mainWindow.getWrapper();
-            List<JavaClass> allClasses = wrapper.getIncludedClassesWithInners();
+            JadxDecompiler wrapper = decompiler.get();
+            List<JavaClass> allClasses = classes.get();
 
             // group classes by package
             Map<String, Integer> packageCounts = new HashMap<>();
@@ -803,7 +826,7 @@ public class ClassRoutes {
      * clears the decompilation cache and resets all counters.
      */
     public void handleCacheClear(Context ctx) {
-        com.zin.jadxaimcp.utils.ProjectState.invalidate(mainWindow);
+        invalidate.run();
             decompilationCache.clear();
         ctx.json(Map.of("status", "cleared", "stats", decompilationCache.getStats()));
     }
