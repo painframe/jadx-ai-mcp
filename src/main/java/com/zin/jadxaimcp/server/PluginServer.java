@@ -157,6 +157,7 @@ public class PluginServer {
     private void registerRoutes() {
         // Instantiate Route Controllers
         // Passing 'mainWindow' and 'paginationUtils' to them so they can do their work
+        AnalysisRoutes analysisRoutes = new AnalysisRoutes(mainWindow, paginationUtils);
         GeneralRoutes generalRoutes = new GeneralRoutes(mainWindow, port, this);
         ClassRoutes classRoutes = new ClassRoutes(mainWindow, paginationUtils);
         MethodRoutes methodRoutes = new MethodRoutes(mainWindow, paginationUtils);
@@ -168,6 +169,8 @@ public class PluginServer {
 
         // --- General & Health ---
         app.get("/health", generalRoutes::handleHealth);
+        app.get("/class-info", analysisRoutes::classInfo);
+        app.get("/method-signature", analysisRoutes::methodSignature);
 
         // --- Class & Code Navigation ---
         app.get("/current-class", classRoutes::handleCurrentClass);

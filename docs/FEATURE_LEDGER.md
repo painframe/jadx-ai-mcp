@@ -11,3 +11,5 @@ Tests use disposable APK/JAR fixtures, never a user project. Donor binaries and 
 | 05 Search patterns | feat/search-patterns | odell0111@951d6d964ae194a45bd4735bd8839d455d0607ba | case, escapes, invalid pattern and actual matcher timeout tests | Python feat/search-patterns |
 
 | 06 GUI search parity | feat/gui-search-parity | ai-repo-save@6118c438dd22950b92d606891b7ad89c892c3698 | Maven compile/test; safe regex offsets; provider exceptions propagate (no silent partial success) | Java-only |
+
+| 07 Analysis metadata | feat/analysis-metadata | xjoker@30337f6f072aa360e9099c99e99fb330d44e8986 | Maven package; actual method metadata + Frida arrays | Python feat/analysis-metadata |
