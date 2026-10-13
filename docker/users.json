@@ -1,0 +1,5 @@
+{
+  "users": [
+    {"id": "analyst", "token_env": "ANALYST_MCP_TOKEN", "instances": {"primary": "read", "secondary": "read", "gui": "read"}}
+  ]
+}

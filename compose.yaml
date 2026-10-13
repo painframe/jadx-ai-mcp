@@ -1,0 +1,58 @@
+name: jadx-analysis
+services:
+  jadx-primary:
+    image: painframe/jadx-ai-mcp:local
+    init: true
+    command: ["--input", "${JADX_PRIMARY_INPUT:?Set absolute primary archive path}", "--host", "0.0.0.0", "--port", "8650", "--token-file", "/run/secrets/backend-token"]
+    volumes:
+      - type: bind
+        source: ${JADX_PRIMARY_INPUT:?Set absolute primary archive path}
+        target: ${JADX_PRIMARY_INPUT:?Set absolute primary archive path}
+        read_only: true
+    secrets: [backend-token]
+    networks: [analysis]
+  jadx-secondary:
+    image: painframe/jadx-ai-mcp:local
+    init: true
+    command: ["--input", "${JADX_SECONDARY_INPUT:?Set absolute secondary archive path}", "--host", "0.0.0.0", "--port", "8650", "--token-file", "/run/secrets/backend-token"]
+    volumes:
+      - type: bind
+        source: ${JADX_SECONDARY_INPUT:?Set absolute secondary archive path}
+        target: ${JADX_SECONDARY_INPUT:?Set absolute secondary archive path}
+        read_only: true
+    secrets: [backend-token]
+    networks: [analysis]
+  bridge:
+    image: painframe/jadx-mcp-server:local
+    init: true
+    command: ["--http", "--host", "0.0.0.0", "--users-file", "/config/users.json", "--instances-file", "/config/instances.json"]
+    environment: [ANALYST_MCP_TOKEN]
+    ports: ["127.0.0.1:8651:8651"]
+    volumes:
+      - ./docker/instances.json:/config/instances.json:ro
+      - ./docker/users.json:/config/users.json:ro
+    secrets: [backend-token]
+    networks: [analysis, frontend]
+    depends_on: [jadx-primary, jadx-secondary]
+  gui:
+    image: painframe/jadx-ai-mcp-gui:local
+    profiles: [gui]
+    init: true
+    command: ["${JADX_PRIMARY_INPUT:?Set absolute primary archive path}"]
+    ports: ["127.0.0.1:6080:6080"]
+    volumes:
+      - type: bind
+        source: ${JADX_PRIMARY_INPUT:?Set absolute primary archive path}
+        target: ${JADX_PRIMARY_INPUT:?Set absolute primary archive path}
+        read_only: true
+    secrets: [backend-token, gui-password]
+    networks: [analysis, frontend]
+secrets:
+  backend-token:
+    file: ${JADX_BACKEND_TOKEN_FILE:?Set backend token file path}
+  gui-password:
+    file: ${JADX_GUI_PASSWORD_FILE:-./docker/gui-password-not-configured}
+networks:
+  analysis:
+    internal: true
+  frontend: {}

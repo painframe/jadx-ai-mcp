@@ -1,0 +1,8 @@
+{
+  "default": "primary",
+  "instances": [
+    {"id": "primary", "url": "http://jadx-primary:8650", "aliases": ["baseline"], "token_file": "/run/secrets/backend-token"},
+    {"id": "secondary", "url": "http://jadx-secondary:8650", "aliases": ["candidate"], "token_file": "/run/secrets/backend-token"},
+    {"id": "gui", "url": "http://gui:8650", "aliases": [], "token_file": "/run/secrets/backend-token"}
+  ]
+}

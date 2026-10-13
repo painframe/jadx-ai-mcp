@@ -1,0 +1,15 @@
+FROM painframe/jadx-ai-mcp:local AS plugin
+FROM python:3.13-slim-bookworm@sha256:a1165e272e578941b84abc79e4ab38a0305cd12803a5c4247979ac7655f4d641
+RUN rm -f /etc/apt/sources.list.d/debian.sources && printf '%s\n' \
+    'deb [check-valid-until=no] https://snapshot.debian.org/archive/debian/20261001T000000Z bookworm main' \
+    'deb [check-valid-until=no] https://snapshot.debian.org/archive/debian-security/20261001T000000Z bookworm-security main' \
+    > /etc/apt/sources.list && apt-get update && apt-get install -y --no-install-recommends \
+    xvfb x11vnc novnc websockify fonts-dejavu-core libxext6 libxrender1 libxtst6 libxi6 \
+    && rm -rf /var/lib/apt/lists/*
+COPY --from=plugin /opt/java/openjdk /opt/java/openjdk
+COPY --from=plugin /opt/plugin /opt/plugin
+COPY --from=plugin /opt/jadx /opt/jadx
+COPY docker/gui-entrypoint.sh /opt/gui-entrypoint.sh
+ENV JAVA_HOME=/opt/java/openjdk PATH=/opt/java/openjdk/bin:$PATH HOME=/tmp DISPLAY=:99
+USER 10001:10001
+ENTRYPOINT ["/bin/bash", "/opt/gui-entrypoint.sh"]
