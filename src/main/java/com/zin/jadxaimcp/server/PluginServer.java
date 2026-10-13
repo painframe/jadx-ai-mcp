@@ -209,6 +209,7 @@ public class PluginServer {
                 "xrefs-to-field", xrefsRoutes::handleXrefsToField), mainWindow);
         post("/batch-analysis", batchRoutes::handle);
 
+        get("/runtime-diagnostics", ctx -> ctx.json(RuntimeDiagnostics.snapshot(scheduler, com.zin.jadxaimcp.utils.DecompilationCache.forWindow(mainWindow).getStats())));
         get("/jvm-info", new JvmRoutes(mainWindow)::handle);
 
         // --- General & Health ---
