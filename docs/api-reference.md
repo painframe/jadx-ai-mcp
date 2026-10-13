@@ -237,3 +237,11 @@ save them manually first. Only one active operation is accepted; status is retai
 across plugin reconstruction. A five-minute missing-completion deadline reports
 failure without pretending the GUI load was cancelled. GUI discovery is bounded
 and starts the listener before an APK is open.
+
+Search accepts comma-separated `exclude_packages` with full package-segment matching,
+and optional `timeout_ms` (1..600000). Identical generation-bound searches share
+work and reuse complete results for30seconds, at most16 entries. Partial or over10000
+match results are not retained. Responses expose search_id,partial,timed_out,warnings
+and echo exclusions. The search deadline is checked between GUI/decompilation steps;
+an individual JADX decompilation can overrun it. Regex evaluation remains separately
+process-isolated. Cancelling a waiter does not cancel another client's shared work.

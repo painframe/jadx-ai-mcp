@@ -39,6 +39,16 @@ class GuiSearchTest {
                     window, java.util.List.of(cls), "x", pattern, null, false, java.util.Set.of("code")));
         }
     }
+    @Test void elapsedSearchDeadlineReportsPartialOutcome() {
+        jadx.gui.ui.MainWindow window = org.mockito.Mockito.mock(jadx.gui.ui.MainWindow.class, org.mockito.Mockito.RETURNS_DEEP_STUBS);
+        java.util.List<String> warnings = new java.util.ArrayList<>();
+        try (SearchPattern pattern = new SearchPattern("x", false, true)) {
+            assertTrue(com.zin.jadxaimcp.server.search.GuiAlignedSearch.collectMatchingClasses(window,
+                    java.util.List.of(org.mockito.Mockito.mock(jadx.api.JavaClass.class)), "x", pattern, null, false,
+                    java.util.Set.of("code"), 0, warnings).isEmpty());
+            assertFalse(warnings.isEmpty());
+        }
+    }
     @Test void realGuiClassProviderSearchesFixture() throws Exception {
         jadx.api.JadxArgs args = new jadx.api.JadxArgs();
         args.setInputFiles(java.util.List.of(new java.io.File("tests/fixtures/jadx-test-library-1.0.0.jar")));

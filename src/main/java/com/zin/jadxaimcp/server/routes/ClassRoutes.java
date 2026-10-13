@@ -50,6 +50,7 @@ public class ClassRoutes {
     private static final Logger logger = LoggerFactory.getLogger(ClassRoutes.class);
     private final MainWindow mainWindow;
     private final PaginationUtils paginationUtils;
+    private final com.zin.jadxaimcp.utils.SearchCoordinator<Map<String, Object>> searches = new com.zin.jadxaimcp.utils.SearchCoordinator<>();
     private final SearchProgressTracker progressTracker = SearchProgressTracker.getInstance();
     private final DecompilationCache decompilationCache;
 
@@ -610,95 +611,52 @@ public class ClassRoutes {
       * Supports pagination and package filtering.
      */
     public void handleSearchClassesByKeyword(Context ctx) {
-        String searchTerm = ctx.queryParam("search_term");
-        if (searchTerm == null || searchTerm.isEmpty()) {
-            JadxAIMCPPluginError.handleError(ctx, 400, "Missing 'search_term' parameter.", logger);
-            return;
-        }
-
-        // Parse optional package filter parameter
-        String packageFilter = ctx.queryParam("package");
-
-        // Parse search locations, default to CODE if not specified
-        Set<SearchLocation> searchLocations = parseSearchLocations(ctx.queryParam("search_in"));
-
-        String searchId = null;
-        SearchPattern term = null;
         try {
-            JadxWrapper wrapper = mainWindow.getWrapper();
-            if (wrapper == null) {
-                JadxAIMCPPluginError.handleError(ctx, 500, "JadxWrapper not initialized", logger);
-                return;
-            }
-            List<JavaClass> allClasses = wrapper.getIncludedClassesWithInners();
-            term = new SearchPattern(searchTerm, SearchPattern.flag(ctx.queryParam("regex")),
-                    SearchPattern.flag(ctx.queryParam("case_sensitive")));
-
-            // Start progress tracking
-            String locationsDesc = searchLocations.stream()
-                    .map(Enum::name).collect(Collectors.joining(","));
-            // Total work = classes × locations, cuz each location scans all classes
-            searchId = progressTracker.startSearch(locationsDesc, allClasses.size() * searchLocations.size());
-
-            // Check if package filter should be applied
-            // Disable package filtering for jadx obfuscated packages (p000, p001, etc.)
-            boolean applyPackageFilter = isValidPackageFilter(packageFilter);
-            if (packageFilter != null && !applyPackageFilter) {
-                logger.info(
-                        "JADX AI MCP: Package filter '{}' appears to be a jadx obfuscated package name, skipping package filtering",
-                        packageFilter);
-            }
-
-            // Use LinkedHashSet to maintain order and ensure deduplication
-            Set<JavaClass> matchingClassesSet = new LinkedHashSet<>();
-
-            Set<String> locationKeys = searchLocations.stream()
-                    .map(location -> location == SearchLocation.CODE ? "code" : location == SearchLocation.COMMENT ? "comment"
-                            : location.name().toLowerCase(java.util.Locale.ROOT).replace("_name", ""))
-                    .collect(Collectors.toCollection(LinkedHashSet::new));
-            matchingClassesSet.addAll(com.zin.jadxaimcp.server.search.GuiAlignedSearch.collectMatchingClasses(
-                    mainWindow, allClasses, searchTerm, term, packageFilter, applyPackageFilter, locationKeys));
-
-            // Convert to list for pagination
-            List<JavaClass> matchingClasses = new ArrayList<>(matchingClassesSet);
-
-            // Mark search as completed/ done
-            progressTracker.completeSearch(searchId, matchingClasses.size());
-
-            logger.info("JADX AI MCP: Search completed. Found {} unique classes matching '{}' in locations: {}",
-                    matchingClasses.size(), searchTerm, searchLocations);
-
-            Map<String, Object> result = paginationUtils.handlePagination(
-                    ctx,
-                    matchingClasses,
-                    "class-list",
-                    "classes",
-                    JavaClass::getFullName);
-            result.put("search_options", Map.of("regex", SearchPattern.flag(ctx.queryParam("regex")),
-                    "case_sensitive", SearchPattern.flag(ctx.queryParam("case_sensitive"))));
+            String searchTerm = ctx.queryParam("search_term");
+            String packageFilter = ctx.queryParam("package");
+            String excluded = ctx.queryParam("exclude_packages") == null ? "" : ctx.queryParam("exclude_packages");
+            if (excluded.length() > 4096) throw new IllegalArgumentException("Package exclusion list is too long");
+            boolean regex = SearchPattern.flag(ctx.queryParam("regex"));
+            boolean sensitive = SearchPattern.flag(ctx.queryParam("case_sensitive"));
+            int timeout = ctx.queryParam("timeout_ms") == null ? 600000 : Integer.parseInt(ctx.queryParam("timeout_ms"));
+            if (timeout < 1 || timeout > 600000) throw new IllegalArgumentException("timeout_ms must be 1..600000");
+            Set<SearchLocation> locations = parseSearchLocations(ctx.queryParam("search_in"));
+            Set<String> keys = locations.stream().map(location -> location == SearchLocation.CODE ? "code"
+                    : location == SearchLocation.COMMENT ? "comment" : location.name().toLowerCase(java.util.Locale.ROOT).replace("_name", ""))
+                    .collect(Collectors.toCollection(java.util.TreeSet::new));
+            String generation = com.zin.jadxaimcp.utils.ProjectState.generation(mainWindow);
+            String key = new com.google.gson.Gson().toJson(java.util.Arrays.asList(generation, searchTerm, packageFilter, excluded, regex, sensitive, timeout, keys));
+            Map<String, Object> found = searches.get(key, () -> {
+                List<JavaClass> classes = mainWindow.getWrapper().getIncludedClassesWithInners().stream()
+                        .filter(cls -> java.util.Arrays.stream(excluded.split(",")).map(String::trim).filter(value -> !value.isEmpty())
+                                .noneMatch(value -> cls.getPackage().equals(value) || cls.getPackage().startsWith(value + ".")))
+                        .collect(Collectors.toList());
+                String id = progressTracker.startSearch(String.join(",", keys), classes.size() * keys.size());
+                List<String> warnings = new ArrayList<>();
+                try (SearchPattern pattern = new SearchPattern(searchTerm, regex, sensitive)) {
+                    List<JavaClass> matches = new ArrayList<>(com.zin.jadxaimcp.server.search.GuiAlignedSearch.collectMatchingClasses(
+                            mainWindow, classes, searchTerm, pattern, packageFilter, isValidPackageFilter(packageFilter), keys,
+                            System.nanoTime() + java.util.concurrent.TimeUnit.MILLISECONDS.toNanos(timeout), warnings));
+                    if (!generation.equals(com.zin.jadxaimcp.utils.ProjectState.generation(mainWindow)))
+                        throw new IllegalArgumentException("Project changed during search; retry");
+                    progressTracker.completeSearch(id, matches.size());
+                    return Map.of("classes", List.copyOf(matches), "search_id", id, "partial", !warnings.isEmpty(),
+                            "timed_out", !warnings.isEmpty() && !Thread.currentThread().isInterrupted(), "warnings", List.copyOf(warnings));
+                } catch (RuntimeException error) { progressTracker.failSearch(id, error.getMessage()); throw error; }
+            });
+            @SuppressWarnings("unchecked") List<JavaClass> matches = (List<JavaClass>) found.get("classes");
+            if (matches.size() > 10000 || Boolean.TRUE.equals(found.get("partial"))) searches.remove(key, found);
+            Map<String, Object> result = paginationUtils.handlePagination(ctx, matches, "class-list", "classes", JavaClass::getFullName);
+            for (String field : List.of("search_id", "partial", "timed_out", "warnings")) result.put(field, found.get(field));
+            result.put("search_options", Map.of("regex", regex, "case_sensitive", sensitive));
+            result.put("exclude_packages", excluded);
             ctx.json(result);
-        } catch (IllegalArgumentException e) {
-            if (searchId != null) progressTracker.failSearch(searchId, e.getMessage());
-            JadxAIMCPPluginError.handleError(ctx, 400, e.getMessage(), logger);
-        } catch (PaginationException e) {
-            if (searchId != null) {
-                progressTracker.failSearch(searchId, e.getMessage());
-            }
-            JadxAIMCPPluginError.handleError(ctx,
-                    "Internal error while generating pagination result for handleSearchClassesByKeyword: "
-                            + e.getMessage(),
-                    e, logger);
-        } catch (Exception e) {
-            if (searchId != null) {
-                progressTracker.failSearch(searchId, e.getMessage());
-            }
-            JadxAIMCPPluginError.handleError(ctx,
-                    "Internal error occurred while trying to handle the search classes by keyword mcp request: "
-                            + e.getMessage(),
-                    e, logger);
-        } finally {
-            if (term != null) term.close();
-        }
+        } catch (com.zin.jadxaimcp.utils.SearchCoordinator.CapacityException error) {
+            JadxAIMCPPluginError.handleError(ctx, 503, error.getMessage(), logger);
+        } catch (com.zin.jadxaimcp.utils.SearchCoordinator.WaitingTimeout error) {
+            JadxAIMCPPluginError.handleError(ctx, 504, error.getMessage(), logger);
+        } catch (IllegalArgumentException error) { JadxAIMCPPluginError.handleError(ctx, 400, error.getMessage(), logger); }
+        catch (Exception error) { JadxAIMCPPluginError.handleError(ctx, "Cannot search classes", error, logger); }
     }
 
     /**

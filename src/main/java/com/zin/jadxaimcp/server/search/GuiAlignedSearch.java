@@ -56,6 +56,12 @@ public final class GuiAlignedSearch {
             boolean applyPackageFilter,
             Set<String> locationKeys) {
 
+        return collectMatchingClasses(mainWindow, allClasses, searchTerm, pattern, packageFilter,
+                applyPackageFilter, locationKeys, Long.MAX_VALUE, new java.util.ArrayList<>());
+    }
+    public static LinkedHashSet<JavaClass> collectMatchingClasses(MainWindow mainWindow, List<JavaClass> allClasses,
+            String searchTerm, SearchPattern pattern, String packageFilter, boolean applyPackageFilter,
+            Set<String> locationKeys, long deadline, List<String> warnings) {
         SearchSettings ss = new SearchSettings(searchTerm) {
             @Override public boolean isMatch(String value) { return pattern.matches(value); }
             @Override public ISearchMethod getSearchMethod() { return (text, ignored, offset) -> pattern.find(text, offset); }
@@ -92,7 +98,7 @@ public final class GuiAlignedSearch {
 
             @Override
             public boolean isCanceled() {
-                return canceled || Thread.currentThread().isInterrupted();
+                return canceled || Thread.currentThread().isInterrupted() || System.nanoTime() >= deadline;
             }
 
             @Override
@@ -101,6 +107,7 @@ public final class GuiAlignedSearch {
             }
         };
 
+        try {
         for (String key : locationKeys) {
             switch (key) {
                 case "class":
@@ -122,8 +129,11 @@ public final class GuiAlignedSearch {
                     LOG.warn("JADX AI MCP: unknown search location key '{}', skipping", key);
             }
         }
+        } catch (SearchDeadline stopped) { warnings.add("Search stopped at its deadline or cancellation boundary; results are partial"); }
         return out;
     }
+
+    private static final class SearchDeadline extends RuntimeException { }
 
     private static void addCodeMatches(MainWindow mainWindow, SearchSettings ss, SearchPattern pattern, List<JavaClass> searchClasses,
             LinkedHashSet<JavaClass> out, Cancelable c) {
@@ -147,6 +157,7 @@ public final class GuiAlignedSearch {
         };
         // Surface decompilation failures before the GUI provider can log and skip them.
         for (JavaClass cls : searchClasses) {
+            if (c.isCanceled()) throw new SearchDeadline();
             if (!cls.isInner() && !cls.isNoCode()) {
                 jadx.api.ICodeInfo code = cls.getCodeInfo();
                 mainWindow.getWrapper().getArgs().getCodeCache().add(cls.getRawName(), code);
@@ -170,7 +181,7 @@ public final class GuiAlignedSearch {
             int before = provider.progress();
             n = provider.next(c);
             for (int i = before; i < provider.progress(); i++) SearchProgressTracker.getInstance().incrementScanned();
-            if (c.isCanceled()) throw new IllegalArgumentException("Search cancelled");
+            if (c.isCanceled()) throw new SearchDeadline();
             if (n == null) {
                 break;
             }
