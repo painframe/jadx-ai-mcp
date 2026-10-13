@@ -15,7 +15,7 @@ import java.util.function.BooleanSupplier;
 /** Bounded synchronous admission: no detached tasks survive their HTTP handler. */
 public final class RequestScheduler {
     private static final Set<String> CONTROL = Set.of("/health", "/search-progress", "/project-operation", "/runtime-diagnostics");
-    private static final Set<String> HEAVY = Set.of("/class-source", "/smali-of-class", "/main-application-classes-code", "/method-by-name", "/batch-analysis", "/get-resource-file");
+    private static final Set<String> HEAVY = Set.of("/jvm-info", "/class-source", "/smali-of-class", "/main-application-classes-code", "/method-by-name", "/batch-analysis", "/get-resource-file");
     private final Semaphore queued = new Semaphore(64, true);
     private final Semaphore searches = new Semaphore(1, true);
     private final Semaphore heavy = new Semaphore(4, true);
