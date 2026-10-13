@@ -58,10 +58,11 @@ public class CommentRoutes {
     /** How far below a comment line to look for the declaration it belongs to. */
     private static final int COMMENT_LINE_LOOKAHEAD = 3;
     private final MainWindow mainWindow;
-    private final DecompilationCache decompilationCache = DecompilationCache.getInstance();
+    private final DecompilationCache decompilationCache;
 
     public CommentRoutes(MainWindow mainWindow) {
         this.mainWindow = mainWindow;
+        this.decompilationCache = DecompilationCache.forWindow(mainWindow);
     }
 
     /**
@@ -708,6 +709,7 @@ public class CommentRoutes {
         JavaClass topCls = cls.getTopParentClass();
         // Drop the plugin source cache too, else the tools keep serving the
         // pre-comment source back to the MCP client
+        com.zin.jadxaimcp.utils.ProjectState.invalidate(mainWindow);
         decompilationCache.invalidate(cls.getFullName());
         decompilationCache.invalidate(topCls.getFullName());
 
