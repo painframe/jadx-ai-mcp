@@ -61,7 +61,7 @@ public class RefactoringRoutes {
                     event.setRenameNode(cls.getClassNode());
                     event.setResetName(newName.isEmpty());
                     com.zin.jadxaimcp.utils.ProjectState.invalidate(mainWindow);
-                    mainWindow.events().send(event);
+                    com.zin.jadxaimcp.utils.SynchronousRename.apply(mainWindow, event);
 
                     logger.info("Renaming Class {} to {}", cls.getName(), newName);
                     ctx.json(Map.of("result", "Renamed Class " + cls.getName() + " to " + newName));
@@ -166,7 +166,7 @@ public class RefactoringRoutes {
             event.setRenameNode(method.getMethodNode());
             event.setResetName(newName.isEmpty());
             com.zin.jadxaimcp.utils.ProjectState.invalidate(mainWindow);
-                    mainWindow.events().send(event);
+                    com.zin.jadxaimcp.utils.SynchronousRename.apply(mainWindow, event);
 
             logger.info("Renaming method {}.{} to {}", clsName, method.getName(), newName);
             ctx.json(Map.of("result", "Rename method " + clsName + "." + method.getName() + " to " + newName));
@@ -207,7 +207,7 @@ public class RefactoringRoutes {
                             event.setRenameNode(field.getFieldNode());
                             event.setResetName(newFieldName.isEmpty());
                             com.zin.jadxaimcp.utils.ProjectState.invalidate(mainWindow);
-                    mainWindow.events().send(event);
+                    com.zin.jadxaimcp.utils.SynchronousRename.apply(mainWindow, event);
 
                             logger.info("Renaming field {} to {}", field.getName(), newFieldName);
                             ctx.json(Map.of("result", "Renamed field " + field.getName() + " to " + newFieldName));
@@ -311,7 +311,7 @@ public class RefactoringRoutes {
                                         event.setRenameNode(varNode);
                                         event.setResetName(newName.isEmpty());
                                         com.zin.jadxaimcp.utils.ProjectState.invalidate(mainWindow);
-                    mainWindow.events().send(event);
+                    com.zin.jadxaimcp.utils.SynchronousRename.apply(mainWindow, event);
 
                                         logger.info("Renamed variable {} to {} in method {}", variableName, newName,
                                                 method.getName());
@@ -373,7 +373,7 @@ public class RefactoringRoutes {
                         event.setRenameNode(cls.getClassNode());
                         event.setResetName(false);
                         com.zin.jadxaimcp.utils.ProjectState.invalidate(mainWindow);
-                    mainWindow.events().send(event);
+                    com.zin.jadxaimcp.utils.SynchronousRename.apply(mainWindow, event);
                         count++;
                     } catch (Exception e) {
                         errors.add("Failed to rename " + fullName + ": " + e.getMessage());
